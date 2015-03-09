@@ -4,20 +4,69 @@ import os
 import re
 import xml.etree.ElementTree as ET
 
-view_id 			= 0
-initial_commit 		= ""
-tmp_file			= ""
+tmp_commit_files	= set()
 svn_directory		= '/home/dcarver/test'
+commit_files		= []
 EDITOR_EOF_PREFIX 	= '--This line, and those below, will be ignored--\n'
 
-class SvnSaveCommand( sublime_plugin.EventListener ):
-	def on_post_save( self, view ):
-		global view_id
+#
+# SVN Commit Related
+#
 
-		if view.buffer_id() != view_id:
+class SvnCommitCommand( sublime_plugin.WindowCommand ):
+	def run( self, commit_files = [] ):
+		self.commit_file_path = ''
+
+		returncode, output, error = run_command( 'svn status --quiet', cwd = svn_directory )
+
+		if returncode:
+			return log_error( error )
+
+		if not output:
+			return sublime.message_dialog( 'No files to commit' )
+
+		if not self.create_commit_file( output ):
+			return sublime.error_message( 'Failed to create commit file' )
+
+		self.window.open_file( '{0}:0:0' . format( self.commit_file_path ), sublime.ENCODED_POSITION )
+		tmp_commit_files.add( self.commit_file_path )
+
+	def create_commit_file( self, message ):
+		valid_path = False
+
+		for i in range( 100 ):
+			i = i if i > 0 else '' # do not append 0 to the commit file name
+
+			file_path = '/tmp/svn-commit{0}.tmp' . format( i )
+
+			if not os.path.isfile( file_path ):
+				valid_path = True
+				break
+
+		if not valid_path:
+			log_error( 'Failed to create a unique file name' )
+			return False
+
+		try:
+			with open( file_path, 'w' ) as fh:
+				fh.write( '\n' )
+				fh.write( EDITOR_EOF_PREFIX )
+				fh.write( '\n' )
+				fh.write( message )
+		except Exception:
+			log_error( "Failed to write commit data to '{0}'" . format( file_path ) )
+			return False
+
+		self.commit_file_path = file_path
+
+		return True
+
+class SvnCommitSave( sublime_plugin.EventListener ):
+	def on_post_save( self, view ):
+		if not view.file_name() in tmp_commit_files:
 			return
 
-		value, message = get_commit_message( tmp_file )
+		value, message = self.get_commit_message( view.file_name() )
 
 		if not value:
 			return sublime.message_dialog( 'Failed to commit file(s), view console to see more info' )
@@ -25,217 +74,279 @@ class SvnSaveCommand( sublime_plugin.EventListener ):
 		if not message:
 			return sublime.message_dialog( 'Did not commit, log message unchanged or not specified' )
 
-		code, output, error = run_command( 'svn commit -F {0}' . format( tmp_file ), cwd = svn_directory )
+		returncode, output, error = run_command( 'svn commit -F {0}' . format( view.file_name() ), cwd = svn_directory )
 
-		if code:
+		if returncode != 0:
 			sublime.message_dialog( 'Failed to commit file(s)' )
 			return log_error( error )
 
-		sublime.message_dialog( 'Commited file(s)' )
-		view_id = 0
+		sublime.status_message( 'MvSVN: Commited file(s)' )
+
+		tmp_commit_files.remove( view.file_name() )
 		view.close()
-		delete_commit_file( tmp_file )
+		self.delete_commit_file( view.file_name() )
 
 	def on_close( self, view ):
-		if view.buffer_id() != view_id:
+		if not view.file_name() in tmp_commit_files:
 			return
 
-		delete_commit_file( tmp_file )
-		sublime.message_dialog( 'Did not commit' )
+		tmp_commit_files.remove( view.file_name() )
+		self.delete_commit_file( view.file_name() )
+		sublime.status_message( "MvSVN: Did not commit '{0}'" . format( view.file_name() ) )
 
-class SvnCommand( sublime_plugin.WindowCommand ):
-	def run( self ):
-		global view_id
-		global tmp_file
-		global initial_commit
+	def get_commit_message( self, file_path ):
+		message = ''
 
-		view = self.window.active_view()
+		try:
+			with open( file_path, 'r' ) as fh:
+				for line in fh:
+					if line == EDITOR_EOF_PREFIX:
+						found = True
+						break
 
-		code, output, error = run_command( 'svn info .', cwd = svn_directory )
+					message += line
+		except Exception:
+			log_error( "Failed to read in commit message for file '{0}'" . format( file_path ) )
+			return False, None
 
-		if code:
-			return log_error( error )
+		return True, message.strip()
 
-		code, output, error = run_command( 'svn status --quiet', cwd = svn_directory )
+	def delete_commit_file( self, file_path ):
+		if os.path.isfile( file_path ):
+			try:
+				os.remove( file_path )
+			except:
+				log_error( "Failed to delete commit file '{0}'" . format( file_path ) )
+				return False
 
-		if code:
-			return log_error( error )
+		return True
 
-		if not output:
-			return sublime.message_dialog( 'No files to commit' )
-
-		created, file_path = create_commit_file( output )
-
-		if not created:
-			return
-
-		tmp_file		= file_path
-		tmp_view 		= self.window.open_file( '{0}:0:0' . format( file_path ), sublime.ENCODED_POSITION )
-		view_id 		= tmp_view.buffer_id()
-		initial_commit 	= tmp_view.substr( sublime.Region( 0, tmp_view.size() ) )
+#
+# SVN Info Related
+#
 
 class SvnInfoCommand( sublime_plugin.WindowCommand ):
 	def run( self ):
-		view 			= self.window.active_view()
-		self.file_path 	= view.file_name()
-		self.entries	= []
-		self.file_path	= '/home/dcarver/test/test.txt'
-
-		if not self.is_tracked():
-			return
+		self.file_path 					= self.window.active_view().file_name()
+		self.file_path					= '/home/dcarver/test/test.txt'
+		self.panel						= None
+		self.cached_revisions 			= []
+		self.cached_revisions_formatted = []
+		self.top_level_entries			= []
+		self.cached_diff_entries		= []
+		self.svn						= SVN()
+		self.settings					= sublime.load_settings( 'mv_svn.sublime-settings' )
 
 		self.top_level_quick_panel()
 
 	def top_level_quick_panel( self ):
-		self.entries = [ 'View Commit Logs', 'Diff Current Changes', 'Diff at Revision' ]
-		self.window.show_quick_panel( self.entries, lambda index: self.top_level_select_entry( self.entries, index ) )
+		if not self.is_tracked():
+			self.top_level_entries = [ { 'code': 'af', 'value': 'Add File to Repository' } ]
+		else:
+			self.top_level_entries = [ { 'code': 'vr', 'value': 'View Revisions' } ]
 
-	def top_level_select_entry( self, entries, index ):
+			if self.is_modified():
+				self.top_level_entries += [ { 'code': 'cf', 'value': 'Commit File' }, { 'code': 'rf', 'value': 'Revert File' }, { 'code': 'vd', 'value': 'View Differences' } ]
+
+		self.show_quick_panel( [ entry[ 'value' ] for entry in self.top_level_entries ], self.top_level_select_entry )
+
+	def diff_quick_panel( self ):
+		if not self.cached_diff_entries:
+			self.cached_diff_entries = [ 'Diff at Current', 'Diff at Revision' ]
+
+		self.show_quick_panel( self.cached_diff_entries, None )
+
+	def top_level_select_entry( self, index ):
 		if index == -1:
 			return
-		elif index == 0:
-			return self.view_commit_logs()
-		elif index == 1:
-			return self.diff_current()
-		elif index == 2:
-			pass
 
-		log_error( "Invalid top level entry index '{0}'" . format( index ) )
+		code = self.top_level_entries[ index ][ 'code' ]
 
-	def diff_current( self ):
+		if code == 'vr':
+			return self.revisions_quick_panel()
+		elif code == 'vd':
+			return self.diff_quick_panel()
+		elif code == 'cf':
+			return self.commit_file()
+		elif code == 'rf':
+			return self.revert_file()
+		elif code == 'af':
+			return self.add_file()
+
+		log_error( "Invalid top level entry code '{0}'" . format( code ) )
+
+	def commit_file( self ):
+		self.window.run_command( 'svn_commit', { 'commit_files': [ self.file_path ] } )
+
+	def add_file( self ):
+		pass
+
+	def revert_file( self ):
+		if not sublime.ok_cancel_dialog( 'Are you sure you want to revert file:\n\n{0}' . format( self.file_path ), 'Yes, revert' ):
+			sublime.status_message( 'File not reverted' )
+			return
+
+		returncode, output, error = run_command( 'svn revert {0}' . format( self.file_path ) )
+
+		if returncode != 0:
+			log_error( error )
+			sublime.error_message( 'Failed to revert file' )
+
+		sublime.status_message( 'Reverted file' )
+
+	def view_diff( self ):
 		if not self.is_modified():
 			return
 
-		code, output, error = run_command( 'svn diff --diff-cmd /usr/bin/meld {0}' . format( self.file_path ), cwd = svn_directory )
+		returncode, output, error = run_command( 'svn diff --diff-cmd /usr/bin/meld {0}' . format( self.file_path ), cwd = svn_directory )
 
-		if code != 0:
+		if returncode != 0:
 			log_error( error )
 
-	def view_commit_logs( self ):
-		entries = [ '..' ]
-		entries +=( get_file_logs( self.file_path ) )
+	def revisions_quick_panel( self ):
+		if not self.cached_revisions:
+			self.cached_revisions = self.svn.get_revisions( self.file_path )
 
-		sublime.set_timeout( lambda: self.window.show_quick_panel( [ self.format_commit_entry( entry ) for entry in entries ], lambda index: self.commit_logs_select_entry( entries, index ) ), 10 )
+			for revision in self.cached_revisions:
+				self.cached_revisions_formatted.append( self.format_revision( revision ) )
 
-	def commit_logs_select_entry( self, entries, index ):
+		revisions_formatted = [ [ '..', '' ] ]
+		revisions_formatted.extend( self.cached_revisions_formatted )
+
+		self.show_quick_panel( revisions_formatted, self.revision_list_callback, self.revision_highlight )
+
+	def show_quick_panel( self, entries, on_select, on_highlight = None ):
+		sublime.set_timeout( lambda: self.window.show_quick_panel( entries, on_select, on_highlight = on_highlight ), 10 )
+
+	def revision_highlight( self, index ):
 		if index == -1:
 			return
-
-		entry = entries[ index ]
-
-		if type( entry ) is str and entry == '..':
-			sublime.set_timeout( lambda: self.top_level_quick_panel(), 10 )
-			return
-
-		content	= self.get_revision( self.file_path, entry[ 'revision' ] )
-		view	= self.window.new_file()
-
-		sublime.set_timeout( lambda: self.insert_text( view, content ) )
-
-	def format_commit_entry( self, entry ):
-		if type( entry ) is str:
-			return [ entry, '' ]
-
-		return [ 'r{0} | {1} | {2}' . format( entry[ 'revision' ], entry[ 'author' ], entry[ 'date' ] ), entry[ 'message' ] ]
-
-	def insert_text( self, view, content ):
-		if not view.is_loading():
-			view.run_command( 'svn_insert_content', { "content": content } )
+		elif index == 0:
+			self.show_panel( None )
 		else:
-			sublime.set_timeout( lambda: self.insert_text( view, contnet ) )
+			self.show_panel( self.cached_revisions[ index ][ 'message' ] )
 
-	def format_entry( self, entry ):
-		return [ 'r{0} | {1} | {2}' . format( entry[ 'revision' ], entry[ 'author' ], entry[ 'date' ] ), entry[ 'message' ] ]
+	def revision_list_callback( self, index ):
+		self.hide_panel()
 
-	def get_revision( self, file_path, revision ):
-		code, output, error = run_command( 'svn cat -r{0} {1}' . format( revision, file_path ) )
+		if index == -1:
+			return
+		elif index == 0:
+			return self.top_level_quick_panel()
 
-		if code != 0:
+		self.window.new_file().run_command( 'append', { 'characters': self.svn.get_revision_content( self.file_path, self.cached_revisions[ index ][ 'revision' ] ) } )
+
+	def hide_panel( self ):
+		if self.panel:
+				self.window.run_command( 'hide_panel', { 'panel': 'output.svn_panel' } )
+				self.panel = None
+
+	def show_panel( self, content ):
+		if self.settings.get( 'show_panel', True ):
+			self.panel = self.window.create_output_panel( 'svn_panel' )
+			self.window.run_command( 'show_panel', { 'panel': 'output.svn_panel' } )
+			self.panel.set_read_only( False )
+			self.panel.run_command( 'append', { 'characters': content } )
+			self.panel.set_read_only( True )
+
+	def format_revision( self, revision ):
+		return [ 'r{0} | {1} | {2}' . format( revision[ 'revision' ], revision[ 'author' ], revision[ 'date' ] ), revision[ 'message' ] ]
+
+	def is_tracked( self ):
+		returncode, output, error = run_command( 'svn info --xml {0}' . format( self.file_path ) )
+
+		if returncode != 0:
+			log_error( error )
+			return False
+
+		try:
+			root = ET.fromstring( output )
+		except ET.ParseError:
+			log_error( 'Failed to parse XML' )
+			return False
+
+		for child in root.iter( 'entry' ):
+			try:
+				if self.file_path == child.attrib[ 'path' ]:
+					return True
+
+			except KeyError:
+				log_error( 'Failed to find path attribute' )
+
+		return False
+
+	def is_modified( self ):
+		returncode, output, error = run_command( 'svn status --xml {0}' . format( self.file_path ) )
+
+		if returncode != 0:
+			log_error( error )
+			return False
+
+		try:
+			root = ET.fromstring( output )
+		except ET.ParseError:
+			log_error( 'Failed to parse XML' )
+			return False
+
+		for child in root.iter( 'entry' ):
+			try:
+				if self.file_path == child.attrib[ 'path' ]:
+					return True
+			except KeyError:
+				log_error( 'Failed to find path attribute' )
+
+		return False
+
+#
+# Helper Classes
+#
+
+class SvnMeldCommand( sublime_plugin.WindowCommand ):
+	def run( self ):
+		view = self.window.active_view()
+
+		returncode, output, error = run_command( 'svn diff --diff-cmd /usr/bin/meld', cwd = svn_directory )
+
+		if returncode != 0:
+			log_error( error )
+
+class SVN():
+	def __init__( self ):
+		pass
+
+	def run_command( self, command ):
+		return run_command( 'svn {0}' . format( command ), cwd = svn_directory )
+
+	def get_revisions( self, file_path ):
+		revisions					= []
+		returncode, output, error 	= run_command( 'svn log --xml {0}' . format( file_path ) )
+
+		if returncode != 0:
+			log_error( error )
+			return []
+
+		try:
+			root = ET.fromstring( output )
+		except ET.ParseError:
+			log_error( 'Failed to parse XML' )
+			return []
+
+		for child in root.iter( 'logentry' ):
+			revisions.append( { 'revision': child.attrib['revision'], 'author': child[ 0 ].text, 'date': child[ 1 ].text, 'message': child[ 2 ].text.strip() } )
+
+		return revisions
+
+	def get_revision_content( self, file_path, revision ):
+		returncode, output, error = run_command( 'svn cat -r{0} {1}' . format( revision, file_path ) )
+
+		if returncode != 0:
 			log_error( error )
 			return ''
 
 		return output
-
-	def is_tracked( self ):
-		code, output, error = run_command( 'svn info {0}' . format( self.file_path ) )
-
-		if code != 0:
-			log_error( error )
-			return False
-
-		return True
-
-	def is_modified( self ):
-		code, output, error = run_command( 'svn status {0}' . format( self.file_path ) )
-
-		if code != 0:
-			log_error( error )
-			return False
-
-		return True
-
-class SvnInsertContentCommand( sublime_plugin.TextCommand ):
-	def run( self, edit, content = None ):
-		self.view.insert( edit, 0, content )
-
-class SvnMeldCommand( sublime_plugin.WindowCommand ):
-	def run( self ):
-		run_command( 'svn diff -diff-cmd /usr/bin/meld', cwd = svn_directory )
-
-def create_commit_file( message ):
-	valid_path = False
-
-	for i in range( 100 ):
-		i = i if i else ''
-
-		file_path = '/tmp/svn-commit{0}.tmp' . format( i )
-
-		if not os.path.isfile( file_path ):
-			valid_path = True
-			break
-
-	if not valid_path:
-		log_error( 'Failed to create a unique file name' )
-		return False, None
-
-	try:
-		with open( file_path, 'w' ) as fh:
-			fh.write( '\n' )
-			fh.write( EDITOR_EOF_PREFIX )
-			fh.write( '\n' )
-			fh.write( message )
-	except Exception:
-		log_error( "Failed to write commit data to '{0}'" . format( file_path ) )
-		return False, None
-
-	return True, file_path
-
-def delete_commit_file( file_path ):
-	if os.path.isfile( file_path ):
-		try:
-			os.remove( file_path )
-		except:
-			log_error( "Failed to delete commit file '{0}'" . format( file_path ) )
-			return False
-
-	return True
-
-def get_commit_message( file_path ):
-	message = ''
-
-	try:
-		with open( file_path, 'r' ) as fh:
-			for line in fh:
-				if line == EDITOR_EOF_PREFIX:
-					found = True
-					break
-
-				message += line
-	except Exception:
-		log_error( "Failed to read in commit message for file '{0}'" . format( file_path ) )
-		return False, None
-
-	return True, message.strip()
+#
+# Helper Functions
+#
 
 def run_command( command, cwd = None ):
 	process			= subprocess.Popen( command, stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = True, cwd = cwd )
@@ -245,31 +356,6 @@ def run_command( command, cwd = None ):
 
 	return process.returncode, stdout, stderr
 
-def get_file_logs( file_path ):
-	logs				= []
-	code, output, error = run_command( 'svn log --xml {0}' . format( file_path ), cwd = svn_directory )
-
-	if code != 0:
-		log_error( error )
-		return []
-
-	try:
-		root = ET.fromstring( output )
-	except ET.ParseError:
-		log_error( 'Failed to parse XML' )
-		return []
-
-
-	for child in root.iter( 'logentry' ):
-		revision 	= child.attrib['revision']
-		author		= child[ 0 ].text
-		date		= child[ 1 ].text
-		message		= child[ 2 ].text
-		logs.append( { 'revision': revision, 'author': author, 'date': date, 'message': message.strip() } )
-
-	return logs
-
 def log_error( error ):
-	print( 'The following error occurred: \'%s\'' % error.strip() )
+	print( "The following error occurred: '{0}'" . format( error.strip() ) )
 	return
-

@@ -1,0 +1,6 @@
+[
+	{ "keys": ["ctrl+m", "ctrl+c"], "command": "svn_commit" },
+	{ "keys": ["ctrl+m", "ctrl+i"], "command": "svn_info" },
+	{ "keys": ["ctrl+m", "ctrl+m", "ctrl+f"], "command": "svn_meld" },
+	{ "keys": ["ctrl+m", "ctrl+m", "ctrl+d"], "command": "svn_meld" }
+]

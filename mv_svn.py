@@ -188,7 +188,7 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		elif code == 'vd':
 			return self.diff_quick_panel()
 		elif code == 'cf':
-			return self.commit_file()
+			return self.window.run_command( 'svn_commit', { 'file': True } )
 		elif code == 'rf':
 			return self.svn.revert_file( self.file_path )
 		elif code == 'af':
@@ -247,6 +247,7 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		else:
 			self.window.run_command( 'svn_diff', { 'file': True, 'revision': self.cached_revisions[ index - 2 ][ 'revision' ] } )		
 
+
 	def cache_revisions( self ):
 		if self.cached_revisions:
 			return
@@ -255,9 +256,6 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 
 		for revision in self.cached_revisions:
 			self.cached_revisions_formatted.append( self.revision_format( revision ) )
-
-	def commit_file( self ):
-		self.window.run_command( 'svn_commit', { 'commit_files': [ self.file_path ] } )
 
 	def show_quick_panel( self, entries, on_select, on_highlight = None ):
 		sublime.set_timeout( lambda: self.window.show_quick_panel( entries, on_select, on_highlight = on_highlight ), 10 )
@@ -446,7 +444,13 @@ class SVN():
 		return False
 
 	def add_file( self, file_path ):
-		pass
+		returncode, output, error = self.run_command( 'svn add {0}' . format( file_path ) )
+
+		if returncode != 0:
+			self.log_error( error )
+			return False
+
+		return True
 
 	def revert_file( self, file_path ):
 		if not sublime.ok_cancel_dialog( 'Are you sure you want to revert file:\n\n{0}' . format( file_path ), 'Yes, revert' ):

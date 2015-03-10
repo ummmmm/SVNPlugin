@@ -1,0 +1,9 @@
+{
+	"debug": true,
+	"show_panel": true,
+	"svn_log_commands": true,
+	"svn_log_errors": true,
+	"svn_log_limit": 5,
+	"svn_diff_tool": "/usr/bin/meld",
+	"svn": "/usr/bin/svn"
+}

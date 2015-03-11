@@ -40,7 +40,7 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 				return
 
 		if not self.svn.is_modified( path ):
-			sublime.error_message( 'No files have been modified' )
+			sublime.message_dialog( 'No files have been modified' )
 			return
 
 		content = self.svn.get_status( path ).strip()
@@ -68,7 +68,7 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 				break
 
 		if not valid_path:
-			self.log_error( 'Failed to create a unique file name' )
+			self.svn.log_error( 'Failed to create a unique file name' )
 			return False
 
 		try:
@@ -78,33 +78,30 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 				fh.write( '\n' )
 				fh.write( message )
 		except Exception:
-			self.log_error( "Failed to write commit data to '{0}'" . format( file_path ) )
+			self.svn.log_error( "Failed to write commit data to '{0}'" . format( file_path ) )
 			return False
 
 		self.commit_file_path = file_path
 
 		return True
 
-	def log_error( error ):
-		print( "The following error occurred: '{0}'" . format( error.strip() ) )
-
 class SvnCommitSave( sublime_plugin.EventListener ):
 	def on_post_save( self, view ):
 		if view.file_name() not in tmp_commits:
 			return
 
-		svn 				= SVN( view.window(), validate = False )
+		self.svn			= SVN( view.window(), validate = False )
 		commit_file_path	= view.file_name()
 		self.commit_message = ''
 
 		if not self.get_commit_message( commit_file_path ):
-			return sublime.message_dialog( 'Failed to commit file(s)' )
+			return sublime.error_message( 'Failed to commit file(s)' )
 
 		if len( self.commit_message ) == 0:
 			return sublime.message_dialog( 'Did not commit, log message unchanged or not specified' )
 
-		if not svn.commit_file( commit_file_path, tmp_commits[ commit_file_path ] ):
-			return sublime.message_dialog( 'Failed to commit file(s)' )
+		if not self.svn.commit_file( commit_file_path, tmp_commits[ commit_file_path ] ):
+			return sublime.error_message( 'Failed to commit file(s)' )
 
 		sublime.status_message( 'SVN: Commited file(s)' )
 
@@ -116,7 +113,8 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 		if view.file_name() not in tmp_commits:
 			return
 
-		file_path = view.file_name()
+		self.svn	= SVN( view.window(), validate = False )
+		file_path 	= view.file_name()
 
 		del tmp_commits[ file_path ]
 		self.delete_commit_file( file_path )
@@ -134,7 +132,7 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 
 					message += line
 		except Exception:
-			log_error( "Failed to read in commit message for file '{0}'" . format( file_path ) )
+			self.svn.log_error( "Failed to read in commit message for file '{0}'" . format( file_path ) )
 			return False
 
 		self.commit_message = message.strip()
@@ -146,7 +144,7 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 			try:
 				os.remove( file_path )
 			except:
-				log_error( "Failed to delete commit file '{0}'" . format( file_path ) )
+				self.svn.log_error( "Failed to delete commit file '{0}'" . format( file_path ) )
 				return False
 
 		return True
@@ -194,10 +192,10 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		if not self.is_tracked:
 			self.top_level_entries = [ { 'code': 'af', 'value': 'Add File to Repository' } ]
 		else:
-			self.top_level_entries = [ { 'code': 'vr', 'value': 'View Revisions' } ]
+			self.top_level_entries = [ { 'code': 'vr', 'value': 'View Revisions' }, { 'code': 'vd', 'value': 'View Differences' } ]
 
 			if self.is_modified:
-				self.top_level_entries += [ { 'code': 'vd', 'value': 'View Differences' }, { 'code': 'cf', 'value': 'Commit File' }, { 'code': 'rf', 'value': 'Revert File' } ]
+				self.top_level_entries += [ { 'code': 'cf', 'value': 'Commit File' }, { 'code': 'rf', 'value': 'Revert File' } ]
 
 		self.show_quick_panel( [ entry[ 'value' ] for entry in self.top_level_entries ], self.top_level_callback )
 
@@ -262,7 +260,11 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 	def diff_quick_panel( self ):
 		self.cache_revisions()
 
-		revisions_formatted = [ [ '..' ], [ 'Diff Current' ] ]
+		revisions_formatted = [ [ '..' ] ]
+
+		if self.is_modified:
+			revisions_formatted.extend( [ 'Diff Current' ] )
+
 		revisions_formatted.extend( self.cached_revisions_formatted )
 
 		self.show_quick_panel( revisions_formatted, self.diff_callback, self.diff_highlight )
@@ -635,7 +637,3 @@ class SVN():
 #
 # Helper Functions
 #
-
-def log_error( error ):
-	print( "The following error occurred: '{0}'" . format( error.strip() ) )
-	return

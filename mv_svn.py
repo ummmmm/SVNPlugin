@@ -547,10 +547,11 @@ class SVN():
 
 		for child in root.iter( 'entry' ):
 			for wc_status in child.getiterator( 'wc-status' ):
-				if wc_status.get( 'item', '' ) == 'modified':
+				value = wc_status.get( 'item', 'none' )
+
+				if value == 'added' or value == 'deleted' or value == 'replaced' or value == 'modified' or value == 'merged' or value == 'conflicted':
 					result = True
 					break
-
 
 		self.cached_path_info.update( { 'is_modified': result } )
 

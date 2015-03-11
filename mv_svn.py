@@ -154,39 +154,57 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 #
 
 class SvnInfoCommand( sublime_plugin.WindowCommand ):
-	def run( self, file = False, directory = False, project = False ):
-		self.svn						= SVN( self.window )
-		self.file_path 					= ''
-		self.path						= ''
-		self.is_tracked					= False
-		self.is_modified				= False
-		self.panel						= None
-		self.cached_revisions 			= []
-		self.cached_revisions_formatted = []
-		self.top_level_entries			= []
+	def in_folder( self, file_path ):
+		for svn_directory in self.svn_directories:
+			length = len( svn_directory )
 
-		if not self.svn.valid or ( file == False and directory == False and project == False ):
+			if file_path[ 0 : length ] == svn_directory and file_path[ length : length + 1 ] == os.sep:
+				return True
+
+		return False
+
+	def run( self, directory = False ):
+		self.svn					= SVN( self.window, validate = False )
+		self.file_path				= self.window.active_view().file_name()
+		self.settings 				= sublime.load_settings( 'mv_svn.sublime-settings' )
+		self.svn_directories		= self.settings.get( 'svn_directories', [] )
+		self.true_svn_directories	= self.svn_directories_validate()
+		self.info_directory			= False
+		self.into_file				= True
+
+		if directory:
+			self.info_directory		= True
+			self.info_file			= False
+
+		if self.info_directory:
+			return self.info_directory_quick_panel()
+
+		if not self.in_folder( self.file_path ):
+			sublime.error_message( 'File is not in a listed SVN repository' )
 			return
 
-		if file:
-			if self.svn.file_tracked:
-				self.path 		= self.svn.current_file
-				self.is_tracked = True
-		elif directory:
-			if self.svn.directory_tracked:
-				self.path 		= self.svn.current_directory
-				self.is_tracked = True
-		elif project:
-			if self.svn.project_tracked:
-				self.path		= self.svn.current_project
-				self.is_tracked = True
+		return self.info_file_quick_panel()
 
-		if self.is_tracked:
-			self.is_modified	= self.svn.is_modified( self.path )
+	def svn_directories_validate( self ):
+		svn_directories = set()
 
-		self.file_path = self.path
+		for svn_directory in self.svn_directories:
+			if self.svn.is_tracked( svn_directory ):
+				svn_directories.add( svn_directory )
 
-		self.top_level_quick_panel()
+		return list( svn_directories )
+
+	def info_directory_quick_panel( self ):
+		self.show_quick_panel( self.true_svn_directories, self.info_directory_callback )
+
+	def info_directory_callback( self, index ):
+		pass
+
+	def info_file_quick_panel( self ):
+		self.show_quick_panel( [], self.info_file_callback )
+
+	def info_file_callback( self, index ):
+		pass
 
 	def top_level_quick_panel( self ):
 		if not self.is_tracked:
@@ -250,7 +268,7 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 			return
 		elif index == 0:
 			return self.show_panel( None )
-		
+
 		offset 		= 1
 		revision	= self.cached_revisions[ index - offset ]
 
@@ -281,7 +299,7 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		else:
 			offset		= 2
 			revision 	= self.cached_revisions[ index - offset ]
-			self.window.run_command( 'svn_diff', { 'file': True, 'revision': revision[ 'number' ] } )		
+			self.window.run_command( 'svn_diff', { 'file': True, 'revision': revision[ 'number' ] } )
 
 	def diff_highlight( self, index ):
 		if index == -1:
@@ -428,7 +446,7 @@ class SVN():
 		if self.sublime_window.active_view().file_name() is not None:
 			self.current_file		= self.sublime_window.active_view().file_name()
 			self.current_directory	= os.path.dirname( self.sublime_window.active_view().file_name() )
-		
+
 		if self.sublime_window.project_file_name() is not None:
 			self.current_project = os.path.dirname( self.sublime_window.project_file_name() )
 

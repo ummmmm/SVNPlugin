@@ -410,6 +410,14 @@ class SVN():
 		self.current_file		= None
 		self.sublime_window		= sublime_window
 		self.settings 			= sublime.load_settings( 'mv_svn.sublime-settings' )
+		self.svn_binary			= self.settings.get( 'svn', None )
+
+		if self.svn_binary is None:
+			sublime.error_message( 'An SVN binary program needs to be set in user settings!' )
+			return
+		elif not os.access( self.svn_binary, os.X_OK ):
+			sublime.error_message( 'The SVN binary needs to be executable!' )
+			return
 
 		if validate:
 			self.setup()
@@ -438,13 +446,12 @@ class SVN():
 		self.valid = True
 
 	def get_revisions( self, path, limit = None ):
-		revisions	= []
-		command 	= 'svn log --xml'
+		revisions = []
 
 		if limit is None:
-			command = 'svn log --xml {0}' . format( shlex.quote( path ) )
+			command = 'log --xml {0}' . format( shlex.quote( path ) )
 		else:
-			command = 'svn log --xml --limit={0} {1}' . format( limit, shlex.quote( path ) )
+			command = 'log --xml --limit={0} {1}' . format( limit, shlex.quote( path ) )
 
 		returncode, output, error  = self.run_command( command )
 
@@ -464,7 +471,7 @@ class SVN():
 		return revisions
 
 	def get_revision_content( self, file_path, revision ):
-		returncode, output, error = self.run_command( 'svn cat -r{0} {1}' . format( revision, shlex.quote( file_path ) ) )
+		returncode, output, error = self.run_command( 'cat -r{0} {1}' . format( revision, shlex.quote( file_path ) ) )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -473,7 +480,7 @@ class SVN():
 		return output
 
 	def get_status( self, path, quiet = True, xml = False ):
-		command = 'svn status'
+		command = 'status'
 
 		if quiet:
 			command += ' --quiet'
@@ -481,7 +488,7 @@ class SVN():
 		if xml:
 			command += ' --xml'
 
-		command += ' {0}' . format( shlex.quote( shlex.quote( path ) ) )
+		command += ' {0}' . format( shlex.quote( path ) )
 
 		returncode, output, error = self.run_command( command )
 
@@ -493,7 +500,7 @@ class SVN():
 
 
 	def is_tracked( self, file_path ):
-		returncode, output, error = self.run_command( 'svn info --xml {0}' . format( shlex.quote( file_path ) ) )
+		returncode, output, error = self.run_command( 'info --xml {0}' . format( shlex.quote( file_path ) ) )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -516,7 +523,7 @@ class SVN():
 		return False
 
 	def is_modified( self, file_path ):
-		returncode, output, error = self.run_command( 'svn status --xml {0}' . format( shlex.quote( file_path ) ) )
+		returncode, output, error = self.run_command( 'status --xml {0}' . format( shlex.quote( file_path ) ) )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -538,7 +545,7 @@ class SVN():
 		return False
 
 	def add_file( self, file_path ):
-		returncode, output, error = self.run_command( 'svn add {0}' . format( shlex.quote( file_path ) ) )
+		returncode, output, error = self.run_command( 'add {0}' . format( shlex.quote( file_path ) ) )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -551,7 +558,7 @@ class SVN():
 			sublime.status_message( 'File not reverted' )
 			return
 
-		returncode, output, error = self.run_command( 'svn revert {0}' . format( shlex.quote( file_path ) ) )
+		returncode, output, error = self.run_command( 'revert {0}' . format( shlex.quote( file_path ) ) )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -564,7 +571,7 @@ class SVN():
 			self.log_error( "Failed to find commit file '{0}'" . format( commit_file_path ) )
 			return False
 
-		returncode, output, error = self.run_command( 'svn commit --file={0} {1}' . format( commit_file_path, shlex.quote( path ) ) )
+		returncode, output, error = self.run_command( 'commit --file={0} {1}' . format( commit_file_path, shlex.quote( path ) ) )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -585,7 +592,7 @@ class SVN():
 			command 		+= ' diff {0}' . format( shlex.quote( path ) )
 			in_background	= False
 
-		returncode, output, error = self.run_command( 'svn {0}' . format( command ), in_background = in_background )
+		returncode, output, error = self.run_command( command, in_background = in_background )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -596,7 +603,7 @@ class SVN():
 		self.sublime_window.new_file().run_command( 'append', { 'characters': output } )
 
 	def update( self, path ):
-		returncode, output, error = self.run_command( 'svn update {0}' . format( shlex.quote( path ) ) )
+		returncode, output, error = self.run_command( 'update {0}' . format( shlex.quote( path ) ) )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -605,6 +612,8 @@ class SVN():
 		return output
 
 	def run_command( self, command, in_background = False ):
+		command = '{0} {1}' . format( self.svn_binary, command )
+
 		if self.settings.get( 'svn_log_commands', False ):
 			print( command )
 

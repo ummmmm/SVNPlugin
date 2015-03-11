@@ -7,43 +7,41 @@ import xml.etree.ElementTree as ET
 
 tmp_commits			= dict()
 EDITOR_EOF_PREFIX 	= '--This line, and those below, will be ignored--\n'
+NOT_SVN_FILE		= 'File is not in a listed SVN repository'
+NOT_SVN_DIRECTORY	= 'Directory is not a listed SVN repository'
 
 #
 # SVN Commit Related
 #
 
 class SvnCommitCommand( sublime_plugin.WindowCommand ):
-	def run( self, file = False, directory = False, project = False ):
-		self.svn				= SVN( self.window )
+	def run( self, file = False, directory = False, file_path = None, directory_path = None ):
+		svn						= SVN()
 		self.commit_file_path 	= ''
+		current_file_path		= self.window.active_view().file_name()
 
-		if not self.svn.valid or ( file == False and directory == False and project == False ):
+		if file or file_path is not None:
+			if file:
+				path = current_file_path
+			else:
+				path = file_path
+
+			if not svn.in_svn_directory( path ):
+				sublime.error_message( NOT_SVN_FILE )
+				return
+		elif directory or directory_path is not None:
+			if directory:
+				path = svn.get_svn_directory( current_file_path )
+			else:
+				path = directory_path
+
+			if path not in svn.directories:
+				sublime.error_message( NOT_SVN_DIRECTORY )
+				return
+		else:
 			return
 
-		if file:
-			if self.svn.file_tracked:
-				path = self.svn.current_file
-			else:
-				sublime.error_message( 'File is not under version control' )
-				return
-		elif directory:
-			if self.svn.directory_tracked:
-				path = self.svn.current_directory
-			else:
-				sublime.error_message( 'Directory is not under version control' )
-				return
-		elif project:
-			if self.svn.project_tracked:
-				path = self.svn.current_project
-			else:
-				sublime.error_message( 'Project directory is not under version control' )
-				return
-
-		if not self.svn.is_modified( path ):
-			sublime.message_dialog( 'No files have been modified' )
-			return
-
-		content = self.svn.get_status( path ).strip()
+		content = svn.get_status( path ).strip()
 
 		if len( content ) == 0:
 			return sublime.message_dialog( 'No files to commit' )
@@ -90,35 +88,40 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 		if view.file_name() not in tmp_commits:
 			return
 
-		self.svn			= SVN( view.window(), validate = False )
+		svn					= SVN()
 		commit_file_path	= view.file_name()
+		commit_path			= tmp_commits[ commit_file_path ]
 		self.commit_message = ''
 
+		if not svn.is_modified( commit_path ):
+			self.remove( view )
+			sublime.message_dialog( 'No file(s) have been modified' )
+			return
+
 		if not self.get_commit_message( commit_file_path ):
-			return sublime.error_message( 'Failed to commit file(s)' )
+			return sublime.error_message( 'Failed to load commit message, file(s) not committed' )
 
 		if len( self.commit_message ) == 0:
 			return sublime.message_dialog( 'Did not commit, log message unchanged or not specified' )
 
-		if not self.svn.commit_file( commit_file_path, tmp_commits[ commit_file_path ] ):
+		if not svn.commit_file( commit_file_path, tmp_commits[ commit_file_path ] ):
 			return sublime.error_message( 'Failed to commit file(s)' )
 
-		sublime.status_message( 'SVN: Commited file(s)' )
-
-		del tmp_commits[ commit_file_path ]
-		view.close()
-		self.delete_commit_file( commit_file_path )
+		sublime.status_message( 'Commited file(s)' )
+		self.remove( view )
 
 	def on_close( self, view ):
 		if view.file_name() not in tmp_commits:
 			return
 
-		self.svn	= SVN( view.window(), validate = False )
-		file_path 	= view.file_name()
+		del tmp_commits[ view.file_name() ]
+		self.delete_commit_file( view.file_name() )
+		sublime.status_message( "Did not commit '{0}'" . format( view.file_name() ) )
 
-		del tmp_commits[ file_path ]
-		self.delete_commit_file( file_path )
-		sublime.status_message( "Did not commit '{0}'" . format( file_path ) )
+	def remove( self, view ):
+		del tmp_commits[ view.file_name() ]
+		self.delete_commit_file( view.file_name() )
+		view.close()
 
 	def get_commit_message( self, file_path ):
 		message = ''
@@ -132,7 +135,6 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 
 					message += line
 		except Exception:
-			self.svn.log_error( "Failed to read in commit message for file '{0}'" . format( file_path ) )
 			return False
 
 		self.commit_message = message.strip()
@@ -144,7 +146,6 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 			try:
 				os.remove( file_path )
 			except:
-				self.svn.log_error( "Failed to delete commit file '{0}'" . format( file_path ) )
 				return False
 
 		return True
@@ -154,265 +155,253 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 #
 
 class SvnInfoCommand( sublime_plugin.WindowCommand ):
-	def in_folder( self, file_path ):
-		for svn_directory in self.svn_directories:
-			length = len( svn_directory )
-
-			if file_path[ 0 : length ] == svn_directory and file_path[ length : length + 1 ] == os.sep:
-				return True
-
-		return False
-
-	def run( self, directory = False ):
-		self.svn					= SVN( self.window, validate = False )
-		self.file_path				= self.window.active_view().file_name()
-		self.settings 				= sublime.load_settings( 'mv_svn.sublime-settings' )
-		self.svn_directories		= self.settings.get( 'svn_directories', [] )
-		self.true_svn_directories	= self.svn_directories_validate()
-		self.info_directory			= False
-		self.into_file				= True
-
-		if directory:
-			self.info_directory		= True
-			self.info_file			= False
-
-		if self.info_directory:
-			return self.info_directory_quick_panel()
-
-		if not self.in_folder( self.file_path ):
-			sublime.error_message( 'File is not in a listed SVN repository' )
+	def run( self, file = False, directory = False ):
+		if ( file == directory ):
 			return
 
-		return self.info_file_quick_panel()
+		self.svn					= SVN()
+		self.file_path				= self.window.active_view().file_name()
+		self.commit_panel			= None
+		self.validate_file_paths	= set()
 
-	def svn_directories_validate( self ):
-		svn_directories = set()
+		if directory:
+			return self.info_directory_quick_panel()
 
-		for svn_directory in self.svn_directories:
-			if self.svn.is_tracked( svn_directory ):
-				svn_directories.add( svn_directory )
+		return self.info_file_quick_panel( self.file_path )
 
-		return list( svn_directories )
 
 	def info_directory_quick_panel( self ):
-		self.show_quick_panel( self.true_svn_directories, self.info_directory_callback )
+		self.show_quick_panel( self.svn.directories, self.info_directory_callback )
 
 	def info_directory_callback( self, index ):
-		pass
+		if index == -1:
+			return
 
-	def info_file_quick_panel( self ):
-		self.show_quick_panel( [], self.info_file_callback )
+		directory = self.svn.directories[ index ]
 
-	def info_file_callback( self, index ):
-		pass
+		directory_entries = [ { 'code': 'up', 'value': '..' }, { 'code': 'vf', 'value': 'View Files' }, { 'code': 'vr', 'value': 'View Revisions' } ]
 
-	def top_level_quick_panel( self ):
-		if not self.is_tracked:
-			self.top_level_entries = [ { 'code': 'af', 'value': 'Add File to Repository' } ]
+		if self.svn.is_modified( directory ):
+			directory_entries.insert( 2, { 'code': 'mf', 'value': 'View Modified Files' } )
+
+		self.show_quick_panel( [ entry[ 'value' ] for entry in directory_entries ], lambda index: self.directory_action_callback( directory_entries, index ) )
+
+	def directory_action_callback( self, directory_entries, index ):
+		if index == -1:
+			return
+		elif index == 0:
+			return self.info_directory_quick_panel()
+
+
+	def info_file_quick_panel( self, file_path ):
+		if file_path not in self.validate_file_paths:
+			if not self.svn.in_svn_directory( self.file_path ):
+				sublime.error_message( NOT_SVN_FILE )
+				return
+
+			self.validate_file_paths.add( file_path )
+
+		if not self.svn.is_tracked( file_path ):
+			top_level_file_entries = [ { 'code': 'af', 'value': 'Add File to Repository' } ]
 		else:
-			self.top_level_entries = [ { 'code': 'vr', 'value': 'View Revisions' }, { 'code': 'vd', 'value': 'View Differences' } ]
+			top_level_file_entries = [ { 'code': 'vr', 'value': 'Revisions' } ]
 
-			if self.is_modified:
-				self.top_level_entries += [ { 'code': 'cf', 'value': 'Commit File' }, { 'code': 'rf', 'value': 'Revert File' } ]
+			if self.svn.is_modified( file_path ):
+				top_level_file_entries.extend( [ { 'code': 'cf', 'value': 'Commit' }, { 'code': 'rf', 'value': 'Revert' }, { 'code': 'df', 'value': 'Diff' } ] )
 
-		self.show_quick_panel( [ entry[ 'value' ] for entry in self.top_level_entries ], self.top_level_callback )
+		self.show_quick_panel( [ entry[ 'value' ] for entry in top_level_file_entries ], lambda index: self.info_file_callback( file_path, top_level_file_entries, index ) )
 
-	def top_level_callback( self, index ):
+	def info_file_callback( self, file_path, entries, index ):
 		if index == -1:
 			return
 
 		offset	= 0
-		code 	= self.top_level_entries[ index - offset ][ 'code' ]
+		code 	= entries[ index - offset ][ 'code' ]
 
-		if code == 'vr':
-			return self.revisions_quick_panel()
-		elif code == 'vd':
-			return self.diff_quick_panel()
+		if code == 'af':
+			return self.svn.add_file( file_path )
+		elif code == 'vr':
+			return self.revisions_quick_panel( file_path )
 		elif code == 'cf':
-			return self.window.run_command( 'svn_commit', { 'file': True } )
+			return self.window.run_command( 'svn_commit', { 'file_path': file_path } )
 		elif code == 'rf':
-			return self.svn.revert_file( self.file_path )
-		elif code == 'af':
-			return self.svn.add_file( self.file_path )
+			return self.svn.revert_file( file_path )
+		elif code == 'df':
+			return self.window.run_command( 'svn_diff', { 'file_path': file_path } )
 
-	def revisions_quick_panel( self ):
-		self.cache_revisions()
 
+	def revisions_quick_panel( self, file_path ):
+		revisions 			= self.svn.get_revisions( file_path, self.svn.settings.get( 'svn_log_limit', 100 ) )
 		revisions_formatted = [ [ '..' ] ]
-		revisions_formatted.extend( self.cached_revisions_formatted )
 
-		self.show_quick_panel( revisions_formatted, self.revision_callback, self.revision_highlight )
+		for revision in revisions:
+			revisions_formatted.extend( [ self.revision_format( revision ) ] )
 
-	def revision_callback( self, index ):
+		self.show_quick_panel( revisions_formatted, lambda index: self.revision_callback( file_path, revisions, index ), lambda index: self.revision_highlight( revisions, index  ) )
+
+	def revision_callback( self, file_path, revisions, index ):
 		self.hide_panel()
 
 		if index == -1:
 			return
 		elif index == 0:
-			return self.top_level_quick_panel()
+			return self.info_file_quick_panel( file_path )
 
-		offset			= 1
-		revision		= self.cached_revisions[ index - offset ]
-		current_syntax 	= self.window.active_view().settings().get( 'syntax' )
-		view 			= self.window.new_file()
+		offset				= 1
+		revision_index 		= index - offset
+		entries 			= [ { 'code': 'up', 'value': '..' }, { 'code': 'vf', 'value': 'View' }, { 'code': 'af', 'value': 'Annotate' } ]
 
-		view.run_command( 'append', { 'characters': self.svn.get_revision_content( self.file_path, revision[ 'number' ] ) } )
-		view.set_syntax_file( current_syntax )
+		if revision_index != 0 or self.svn.is_modified( file_path ): # only show diff option if the current revision has been modified locally or it's an older revision
+			entries.insert( 2, { 'code': 'df', 'value': 'Diff' } ) 
 
+		self.show_quick_panel( [ entry[ 'value' ] for entry in entries ], lambda index: self.revision_action_callback( file_path, entries, revisions, revision_index, index ) )
 
-	def revision_format( self, revision ):
-		return 'r{0} | {1} | {2}' . format( revision[ 'number' ], revision[ 'author' ], revision[ 'date' ] )
+	def revision_action_callback( self, file_path, entries, revisions, revision_index, index ):
+		if index == -1:
+			return
 
-	def revision_highlight( self, index ):
+		code = entries[ index ][ 'code' ]
+
+		if code == 'up':
+			return self.revisions_quick_panel( file_path )
+
+		revision = revisions[ revision_index ]
+
+		if code == 'vf':
+			return self.view_revision( revision[ 'path' ], revision[ 'number' ] )
+		elif code == 'df':
+			return self.diff_revision( revision[ 'path' ], revision[ 'number' ] )
+		elif code == 'af':
+			return self.annotate_revision( revision[ 'path' ], revision[ 'number' ] )
+
+	def revision_highlight( self, revisions, index ):
 		if index == -1:
 			return
 		elif index == 0:
 			return self.show_panel( None )
 
 		offset 		= 1
-		revision	= self.cached_revisions[ index - offset ]
+		revision	= revisions[ index - offset ]
 
 		self.show_panel( revision[ 'message' ] )
 
-
-	def diff_quick_panel( self ):
-		self.cache_revisions()
-
-		revisions_formatted = [ [ '..' ] ]
-
-		if self.is_modified:
-			revisions_formatted.extend( [ 'Diff Current' ] )
-
-		revisions_formatted.extend( self.cached_revisions_formatted )
-
-		self.show_quick_panel( revisions_formatted, self.diff_callback, self.diff_highlight )
-
-	def diff_callback( self, index ):
-		self.hide_panel()
-
-		if index == -1:
-			return
-		elif index == 0:
-			return self.top_level_quick_panel()
-		elif index == 1:
-			self.window.run_command( 'svn_diff', { 'file': True } )
-		else:
-			offset		= 2
-			revision 	= self.cached_revisions[ index - offset ]
-			self.window.run_command( 'svn_diff', { 'file': True, 'revision': revision[ 'number' ] } )
-
-	def diff_highlight( self, index ):
-		if index == -1:
-			return
-		elif index == 0:
-			return
-		elif index == 1:
-			return
-
-		offset 		= 2
-		revision 	= self.cached_revisions[ index - offset ]
-
-		self.show_panel( revision[ 'message' ] )
+	def revision_format( self, revision ):
+		return 'r{0} | {1} | {2}' . format( revision[ 'number' ], revision[ 'author' ], revision[ 'date' ] )
 
 
-	def cache_revisions( self ):
-		if self.cached_revisions:
-			return
+	def diff_revision( self, file_path, number ):
+		self.window.run_command( 'svn_diff', { 'file_path' : file_path, 'revision' : number } )
 
-		self.cached_revisions = self.svn.get_revisions( self.file_path, self.svn.settings.get( 'svn_log_limit', 100 ) )
+	def annotate_revision( self, file_path, number ):
+		content 		= self.svn.annotate( file_path, number )
+		current_syntax	= self.window.active_view().settings().get( 'syntax' )
+		view			= self.window.new_file()
 
-		for revision in self.cached_revisions:
-			self.cached_revisions_formatted.append( self.revision_format( revision ) )
+		view.run_command( 'append', { 'characters': content } )
+		view.set_syntax_file( current_syntax )
+
+	def view_revision( self, file_path, number ):
+		content			= self.svn.get_revision_content( file_path, number )
+		current_syntax 	= self.window.active_view().settings().get( 'syntax' )
+		view 			= self.window.new_file()
+
+		view.run_command( 'append', { 'characters': content } )
+		view.set_syntax_file( current_syntax )
+
 
 	def show_quick_panel( self, entries, on_select, on_highlight = None ):
 		sublime.set_timeout( lambda: self.window.show_quick_panel( entries, on_select, on_highlight = on_highlight ), 10 )
 
 	def show_panel( self, content ):
 		if self.svn.settings.get( 'show_panel', True ):
-			self.panel = self.window.create_output_panel( 'svn_panel' )
+			self.commit_panel = self.window.create_output_panel( 'svn_panel' )
 			self.window.run_command( 'show_panel', { 'panel': 'output.svn_panel' } )
-			self.panel.set_read_only( False )
-			self.panel.run_command( 'append', { 'characters': content } )
-			self.panel.set_read_only( True )
+			self.commit_panel.set_read_only( False )
+			self.commit_panel.run_command( 'append', { 'characters': content } )
+			self.commit_panel.set_read_only( True )
 
 	def hide_panel( self ):
-		if self.panel:
+		if self.commit_panel:
 				self.window.run_command( 'hide_panel', { 'panel': 'output.svn_panel' } )
-				self.panel = None
+				self.commit_panel = None
 
 #
 # SVN Diff Related
 #
 
 class SvnDiffCommand( sublime_plugin.WindowCommand ):
-	def run( self, file = False, directory = False, project = False, revision = None, diff_tool = None ):
-		self.svn = SVN( self.window )
+	def run( self, file = False, directory = False, file_path = None, directory_path = None, revision = None ):
+		svn 				= SVN()
+		path				= None
+		current_file_path	= self.window.active_view().file_name()
+		diff_tool 			= svn.settings.get( 'svn_diff_tool', None )
 
-		if not self.svn.valid or ( file == False and directory == False and project == False ):
+		if file or file_path is not None:
+			if file:
+				path = current_file_path
+			else:
+				path = file_path
+
+			if not svn.in_svn_directory( path ):
+				sublime.error_message( NOT_SVN_FILE )
+				return
+		elif directory or directory_path is not None:
+			if directory:
+				path = svn.get_svn_directory( current_file_path )
+			else:
+				path = directory_path
+
+			if path not in svn.directories:
+				sublime.error_message( NOT_SVN_DIRECTORY )
+				return
+		else:
 			return
 
-		if file:
-			if self.svn.file_tracked:
-				path = self.svn.current_file
-			else:
-				sublime.error_message( 'File is not under version control' )
-				return
-		elif directory:
-			if self.svn.directory_tracked:
-				path = self.svn.current_directory
-			else:
-				sublime.error_message( 'Directory is not under version control' )
-				return
-		elif project:
-			if self.svn.project_tracked:
-				path = self.svn.current_project
-			else:
-				sublime.error_message( 'Project directory is not under version control' )
+		if revision is None:
+			if not svn.is_modified( path ):
+				sublime.message_dialog( 'No files have been modified' )
 				return
 
-		if not self.svn.is_modified( path ):
-			sublime.error_message( 'No files have been modified' )
-			return
+		output = svn.diff( path, revision, diff_tool )
 
 		if diff_tool is None:
-			diff_tool = self.svn.settings.get( 'svn_diff_tool', None )
-
-		self.svn.diff( path, diff_tool, revision )
+			self.window.new_file().run_command( 'append', { 'characters': output } )
 
 #
 # SVN Update Related
 #
 
 class SvnUpdateCommand( sublime_plugin.WindowCommand ):
-	def run( self, file = False, directory = False, project = False ):
-		self.svn = SVN( self.window )
+	def run( self, file = False, directory = False, file_path = None, directory_path = None ):
+		svn 				= SVN()
+		path				= None
+		current_file_path	= self.window.active_view().file_name()
 
-		if not self.svn.valid or ( file == False and directory == False and project == False ):
+		if file or file_path is not None:
+			if file:
+				path = current_file_path
+			else:
+				path = file_path
+
+			if not svn.in_svn_directory( path ):
+				sublime.error_message( NOT_SVN_FILE )
+				return
+		elif directory or directory_path is not None:
+			if directory:
+				path = svn.get_svn_directory( current_file_path )
+			else:
+				path = directory_path
+
+			if path not in svn.directories:
+				sublime.error_message( NOT_SVN_DIRECTORY )
+				return
+		else:
 			return
-
-		if file:
-			if self.svn.file_tracked:
-				path = self.svn.current_file
-			else:
-				sublime.error_message( 'File is not under version control' )
-				return
-		elif directory:
-			if self.svn.directory_tracked:
-				path = self.svn.current_directory
-			else:
-				sublime.error_message( 'Directory is not under version control' )
-				return
-		elif project:
-			if self.svn.project_tracked:
-				path = self.svn.current_project
-			else:
-				sublime.error_message( 'Project directory is not under version control' )
-				return
 
 		panel = self.window.create_output_panel( 'svn_panel' )
 		self.window.run_command( 'show_panel', { 'panel': 'output.svn_panel' } )
 		panel.set_read_only( False )
-		panel.run_command( 'insert', { 'characters': self.svn.update( path ) } )
+		panel.run_command( 'insert', { 'characters': svn.update( path ) } )
 		panel.set_read_only( True )
 
 #
@@ -420,17 +409,12 @@ class SvnUpdateCommand( sublime_plugin.WindowCommand ):
 #
 
 class SVN():
-	def __init__( self, sublime_window, validate = True ):
-		self.valid				= False
-		self.project_tracked	= False
-		self.directory_tracked	= False
-		self.file_tracked		= False
-		self.current_project	= None
-		self.current_directory	= None
-		self.current_file		= None
-		self.sublime_window		= sublime_window
+	def __init__( self ):
 		self.settings 			= sublime.load_settings( 'mv_svn.sublime-settings' )
 		self.svn_binary			= self.settings.get( 'svn', None )
+		self.cached_revisions	= dict()
+		self.cached_path_info	= dict()
+		self.directories		= self.valid_directories()
 
 		if self.svn_binary is None:
 			sublime.error_message( 'An SVN binary program needs to be set in user settings!' )
@@ -439,33 +423,26 @@ class SVN():
 			sublime.error_message( 'The SVN binary needs to be executable!' )
 			return
 
-		if validate:
-			self.setup()
+	def valid_directories( self ):
+		directories 			= set()
+		settings_directories	= self.settings.get( 'svn_directories', [] )
 
-	def setup( self ):
-		if self.sublime_window.active_view().file_name() is not None:
-			self.current_file		= self.sublime_window.active_view().file_name()
-			self.current_directory	= os.path.dirname( self.sublime_window.active_view().file_name() )
+		if type( settings_directories ) is not list:
+			self.log_error( 'Invalid SVN directory type' )
+			return []
 
-		if self.sublime_window.project_file_name() is not None:
-			self.current_project = os.path.dirname( self.sublime_window.project_file_name() )
+		for directory in settings_directories:
+			normpath = os.path.normpath( directory )
 
-		if self.current_project is None and self.current_directory is None and self.current_file is None:
-			sublime.error_message( 'Could not deduce a valid SVN repository' )
-			return
+			if self.is_tracked( normpath ):
+				directories.add( normpath )
 
-		if self.current_project:
-			self.project_tracked 	= self.is_tracked( self.current_project )
-
-		if self.current_directory:
-			self.directory_tracked 	= self.is_tracked( self.current_directory )
-
-		if self.current_file:
-			self.file_tracked		= self.is_tracked( self.current_file )
-
-		self.valid = True
+		return list( directories )
 
 	def get_revisions( self, path, limit = None ):
+		if path in self.cached_revisions:
+			return self.cached_revisions[ path ]
+
 		revisions = []
 
 		if limit is None:
@@ -486,7 +463,9 @@ class SVN():
 			return []
 
 		for child in root.iter( 'logentry' ):
-			revisions.append( { 'number': child.attrib['revision'], 'author': child[ 0 ].text, 'date': child[ 1 ].text, 'message': child[ 2 ].text.strip() } )
+			revisions.append( { 'path': path, 'number': child.attrib['revision'], 'author': child[ 0 ].text, 'date': child[ 1 ].text, 'message': child[ 2 ].text.strip() } )
+
+		self.cached_revisions[ path ] = revisions
 
 		return revisions
 
@@ -520,7 +499,11 @@ class SVN():
 
 
 	def is_tracked( self, file_path ):
-		returncode, output, error = self.run_command( 'info --xml {0}' . format( shlex.quote( file_path ) ) )
+		if file_path in self.cached_path_info:
+			return self.cached_path_info[ file_path ][ 'is_tracked' ]
+
+		result						= False
+		returncode, output, error 	= self.run_command( 'info --xml {0}' . format( shlex.quote( file_path ) ) )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -535,15 +518,22 @@ class SVN():
 		for child in root.iter( 'entry' ):
 			try:
 				if file_path == child.attrib[ 'path' ]:
-					return True
+					result = True
+					break
 
 			except KeyError:
 				self.log_error( 'Failed to find path attribute' )
 
-		return False
+		self.cached_path_info.update( { 'is_tracked': result } )
+		
+		return result
 
-	def is_modified( self, file_path ):
-		returncode, output, error = self.run_command( 'status --xml {0}' . format( shlex.quote( file_path ) ) )
+	def is_modified( self, path ):
+		if path in self.cached_path_info:
+			return self.cached_path_info[ path ][ 'is_modified' ]
+
+		result						= False
+		returncode, output, error 	= self.run_command( 'status --xml {0}' . format( shlex.quote( path ) ) )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -556,13 +546,15 @@ class SVN():
 			return False
 
 		for child in root.iter( 'entry' ):
-			try:
-				if file_path == child.attrib[ 'path' ]:
-					return True
-			except KeyError:
-				self.log_error( 'Failed to find path attribute' )
+			for wc_status in child.getiterator( 'wc-status' ):
+				if wc_status.get( 'item', '' ) == 'modified':
+					result = True
+					break
 
-		return False
+
+		self.cached_path_info.update( { 'is_modified': result } )
+
+		return result
 
 	def add_file( self, file_path ):
 		returncode, output, error = self.run_command( 'add {0}' . format( shlex.quote( file_path ) ) )
@@ -599,28 +591,34 @@ class SVN():
 
 		return True
 
-	def diff( self, path, diff_tool = None, revision = None ):
+	def annotate( self, file_path, revision ):
+		returncode, output, error = self.run_command( 'annotate --revision={0} {1}' . format( revision, shlex.quote( file_path ) ) )
+
+		if returncode != 0:
+			self.log_error( error )
+			return ''
+
+		return output
+
+	def diff( self, path, revision = None, diff_tool = None ):
 		command		= ''
 
 		if revision:
 			command += '--revision={0}' . format( revision )
 
-		if diff_tool:
-			command 		+= ' diff --diff-cmd={0} {1}' . format( diff_tool, shlex.quote( path ) )
-			in_background 	= True
-		else:
-			command 		+= ' diff {0}' . format( shlex.quote( path ) )
-			in_background	= False
-
-		returncode, output, error = self.run_command( command, in_background = in_background )
+		if diff_tool is not None:
+			command += ' diff --diff-cmd={0} {1}' . format( diff_tool, shlex.quote( path ) )
+			self.run_command( command, in_background = True )
+			return ''
+		
+		command 		+= ' diff {0}' . format( shlex.quote( path ) )
+		returncode, output, error = self.run_command( command )		
 
 		if returncode != 0:
 			self.log_error( error )
+			return ''
 
-		if diff_tool:
-			return
-
-		self.sublime_window.new_file().run_command( 'append', { 'characters': output } )
+		return output
 
 	def update( self, path ):
 		returncode, output, error = self.run_command( 'update {0}' . format( shlex.quote( path ) ) )
@@ -645,6 +643,30 @@ class SVN():
 			stdout 			= stdout.decode()
 			stderr 			= stderr.decode()
 			return process.returncode, stdout, stderr
+
+		return None
+
+	def in_svn_directory( self, file_path ):
+		if file_path is None:
+			return False
+
+		for directory in self.directories:
+			dir_length = len( directory )
+
+			if file_path.startswith( directory ) and file_path[ dir_length : dir_length + 1 ] == os.sep:
+				return True
+
+		return False
+
+	def get_svn_directory( self, file_path ):
+		if file_path is None:
+			return None
+
+		for directory in self.directories:
+			dir_length = len( directory )
+
+			if file_path.startswith( directory ) and file_path[ dir_length : dir_length + 1 ] == os.sep:
+				return directory
 
 		return None
 

@@ -1,5 +1,6 @@
 import sublime, sublime_plugin
 import os
+import re
 import shlex
 import subprocess
 import xml.etree.ElementTree as ET
@@ -146,6 +147,13 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 		if not result:
 			return sublime.error_message( 'Failed to commit file(s)' )
 
+
+		if svn.settings.get( 'commit_clipboard', '' ):
+			find_revision = self.find_revision( output )
+
+			if find_revision is not None and svn.settings.get( 'commit_clipboard' ).find( '$revision' ) != -1:
+				sublime.set_clipboard( svn.settings.get( 'commit_clipboard' ).replace( '$revision', find_revision ) )
+
 		sublime.status_message( 'Commited file(s)' )
 		svn_plugin.release_locked_files( file_path )
 
@@ -157,6 +165,15 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 
 		view.close()
 		self.delete_commit_file( file_path )
+
+	def find_revision( self, output ):
+		regex 	= re.compile( 'Committed revision ([0-9]+).')
+		matches	= regex.search( output )
+
+		if not matches:
+			return None
+
+		return matches.group( 1 )
 
 	def on_close( self, view ):
 		file_path = view.file_name()

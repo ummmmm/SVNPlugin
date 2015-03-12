@@ -3,8 +3,9 @@
 	"show_panel": true,
 	"svn_log_commands": true,
 	"svn_log_errors": true,
-	"svn_log_limit": 5,
+	"svn_log_limit": 15,
 	"svn_diff_tool": "/usr/bin/meld",
 	"svn": "/usr/bin/svn",
-	"svn_directories": [ "/home/dcarver/test" ]
+	"svn_directories": [ "/home/dcarver/repos/test/", "/home/dcarver/public_html/90003/mm5/5.00" ],
+	"commit_clipboard": "Fixed as of revision #$revision."
 }

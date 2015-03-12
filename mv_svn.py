@@ -120,9 +120,10 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 
 class SvnCommitSave( sublime_plugin.EventListener ):
 	def on_post_save( self, view ):
-		file_path = view.file_name()
+		file_path 			= view.file_name()
+		current_viewed_file	= view.window().active_view().file_name()
 
-		if file_path not in svn_plugin.commit_files:
+		if file_path not in svn_plugin.commit_files or file_path != current_viewed_file:
 			return
 
 		svn					= SVN()
@@ -140,11 +141,20 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 		if len( message.strip() ) == 0:
 			return sublime.message_dialog( 'Did not commit, log message unchanged or not specified' )
 
-		if not svn.commit_file( file_path, files_to_commit ):
+		result, output = svn.commit_file( file_path, files_to_commit )
+
+		if not result:
 			return sublime.error_message( 'Failed to commit file(s)' )
 
 		sublime.status_message( 'Commited file(s)' )
 		svn_plugin.release_locked_files( file_path )
+
+		commit_panel = view.window().create_output_panel( 'svn_panel' )
+		view.window().run_command( 'show_panel', { 'panel': 'output.svn_panel' } )
+		commit_panel.set_read_only( False )
+		commit_panel.run_command( 'append', { 'characters': output } )
+		commit_panel.set_read_only( True )
+
 		self.delete_commit_file( file_path )
 		view.close()
 
@@ -599,20 +609,20 @@ class SVN():
 	def commit_file( self, commit_file_path, paths ):
 		if not os.path.isfile( commit_file_path ):
 			self.log_error( "Failed to find commit file '{0}'" . format( commit_file_path ) )
-			return False
+			return False, None
 
 		files_to_commit = '' # passed in paths will be a set of 1 or more items
 
 		for path in paths:
-			files_to_commit += shlex.quote( path )
+			files_to_commit += ' {0}' . format( shlex.quote( path ) )
 
 		returncode, output, error = self.run_command( 'commit --file={0} {1}' . format( commit_file_path, files_to_commit ) )
 
 		if returncode != 0:
 			self.log_error( error )
-			return False
+			return False, None
 
-		return True
+		return True, output
 
 	def annotate( self, file_path, revision ):
 		returncode, output, error = self.run_command( 'annotate --revision={0} {1}' . format( revision, shlex.quote( file_path ) ) )

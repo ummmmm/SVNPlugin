@@ -1,10 +1,11 @@
 import sublime, sublime_plugin
 import os
-import re
 import shlex
 import subprocess
 import xml.etree.ElementTree as ET
+from .SVNPlugin import SVNPlugin
 
+svn_plugin			= SVNPlugin()
 tmp_commits			= dict()
 EDITOR_EOF_PREFIX 	= '--This line, and those below, will be ignored--\n'
 NOT_SVN_FILE		= 'File is not in a listed SVN repository'
@@ -26,9 +27,11 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 			else:
 				path = file_path
 
-			if not svn.in_svn_directory( path ):
+			if not svn.in_svn_directory( path ) or not svn.is_tracked( path ):
 				sublime.error_message( NOT_SVN_FILE )
 				return
+
+			self.current_repository = svn.get_svn_directory( path )
 		elif directory or directory_path is not None:
 			if directory:
 				path = svn.get_svn_directory( current_file_path )
@@ -38,18 +41,47 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 			if path not in svn.directories:
 				sublime.error_message( NOT_SVN_DIRECTORY )
 				return
+
+			self.current_repository = path
 		else:
 			return
 
-		content = svn.get_status( path ).strip()
+		xml 	= svn.status( path )
+		files 	= set()
 
-		if len( content ) == 0:
+		if xml is None:
+			return
+
+		try:
+			root = ET.fromstring( xml )
+		except ET.ParseError:
+			self.log_error( 'Failed to parse XML' )
+			return
+
+		try:
+			for child in root.iter( 'entry' ):
+				entry_path	= child.attrib[ 'path' ]
+				item_status = child.find( 'wc-status' ).attrib[ 'item' ]
+
+				if item_status == 'added' or item_status == 'modified' or item_status == 'deleted' or item_status == 'replaced':
+					files.add( entry_path )
+
+		except KeyError as e:
+			self.log_error( 'Failed to find key {0}' . format( str( e ) ) )
+			return
+
+		if len( files ) == 0:
 			return sublime.message_dialog( 'No files to commit' )
+
+		if not svn_plugin.add_locked_files( files ):
+			return sublime.error_message( 'One or more files are currently locked' )
+
+		content = svn.status( path, xml = False, quiet = True ).strip()
 
 		if not self.create_commit_file( content ):
 			return sublime.error_message( 'Failed to create commit file' )
 
-		tmp_commits[ self.commit_file_path ] = path
+		svn_plugin.add_commit_file( self.commit_file_path, files )
 
 		self.window.open_file( '{0}:0:0' . format( self.commit_file_path ), sublime.ENCODED_POSITION )
 
@@ -59,7 +91,7 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 		for i in range( 100 ):
 			i = i if i > 0 else '' # do not append 0 to the commit file name
 
-			file_path = '/tmp/svn-commit{0}.tmp' . format( i )
+			file_path = os.path.join( self.current_repository, 'svn-commit{0}.tmp' . format( i ) )
 
 			if not os.path.isfile( file_path ):
 				valid_path = True
@@ -76,70 +108,55 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 				fh.write( '\n' )
 				fh.write( message )
 		except Exception:
-			self.svn.log_error( "Failed to write commit data to '{0}'" . format( file_path ) )
+			self.log_error( "Failed to create commit file '{0}'" . format( file_path ) )
 			return False
 
 		self.commit_file_path = file_path
 
 		return True
 
+	def log_error( self, error ):
+		print( error )
+
 class SvnCommitSave( sublime_plugin.EventListener ):
 	def on_post_save( self, view ):
-		if view.file_name() not in tmp_commits:
+		file_path = view.file_name()
+
+		if file_path not in svn_plugin.commit_files:
 			return
 
 		svn					= SVN()
-		commit_file_path	= view.file_name()
-		commit_path			= tmp_commits[ commit_file_path ]
-		self.commit_message = ''
+		files_to_commit		= svn_plugin.commit_files[ file_path ]
 
-		if not svn.is_modified( commit_path ):
-			self.remove( view )
-			sublime.message_dialog( 'No file(s) have been modified' )
-			return
+		if len( files_to_commit ) == 0:
+			return sublime.message_dialog( 'No files to commit' )
 
-		if not self.get_commit_message( commit_file_path ):
-			return sublime.error_message( 'Failed to load commit message, file(s) not committed' )
+		message 	= view.substr( sublime.Region( 0, view.size() ) )
+		prefix_pos	= message.find( EDITOR_EOF_PREFIX )
 
-		if len( self.commit_message ) == 0:
+		if prefix_pos:
+			message	= message[ 0 : prefix_pos ]
+
+		if len( message.strip() ) == 0:
 			return sublime.message_dialog( 'Did not commit, log message unchanged or not specified' )
 
-		if not svn.commit_file( commit_file_path, tmp_commits[ commit_file_path ] ):
+		if not svn.commit_file( file_path, files_to_commit ):
 			return sublime.error_message( 'Failed to commit file(s)' )
 
 		sublime.status_message( 'Commited file(s)' )
-		self.remove( view )
-
-	def on_close( self, view ):
-		if view.file_name() not in tmp_commits:
-			return
-
-		del tmp_commits[ view.file_name() ]
-		self.delete_commit_file( view.file_name() )
-		sublime.status_message( "Did not commit '{0}'" . format( view.file_name() ) )
-
-	def remove( self, view ):
-		del tmp_commits[ view.file_name() ]
-		self.delete_commit_file( view.file_name() )
+		svn_plugin.release_locked_files( file_path )
+		self.delete_commit_file( file_path )
 		view.close()
 
-	def get_commit_message( self, file_path ):
-		message = ''
+	def on_close( self, view ):
+		file_path = view.file_name()
 
-		try:
-			with open( file_path, 'r' ) as fh:
-				for line in fh:
-					if line == EDITOR_EOF_PREFIX:
-						found = True
-						break
+		if file_path not in svn_plugin.commit_files:
+			return
 
-					message += line
-		except Exception:
-			return False
-
-		self.commit_message = message.strip()
-
-		return True
+		svn_plugin.release_locked_files( file_path )
+		self.delete_commit_file( file_path )
+		sublime.status_message( "Did not commit '{0}'" . format( view.file_name() ) )
 
 	def delete_commit_file( self, file_path ):
 		if os.path.isfile( file_path ):
@@ -252,7 +269,7 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		entries 			= [ { 'code': 'up', 'value': '..' }, { 'code': 'vf', 'value': 'View' }, { 'code': 'af', 'value': 'Annotate' } ]
 
 		if revision_index != 0 or self.svn.is_modified( file_path ): # only show diff option if the current revision has been modified locally or it's an older revision
-			entries.insert( 2, { 'code': 'df', 'value': 'Diff' } ) 
+			entries.insert( 2, { 'code': 'df', 'value': 'Diff' } )
 
 		self.show_quick_panel( [ entry[ 'value' ] for entry in entries ], lambda index: self.revision_action_callback( file_path, entries, revisions, revision_index, index ) )
 
@@ -525,7 +542,7 @@ class SVN():
 				self.log_error( 'Failed to find path attribute' )
 
 		self.cached_path_info.update( { 'is_tracked': result } )
-		
+
 		return result
 
 	def is_modified( self, path ):
@@ -579,12 +596,17 @@ class SVN():
 
 		sublime.status_message( 'Reverted file' )
 
-	def commit_file( self, commit_file_path, path ):
+	def commit_file( self, commit_file_path, paths ):
 		if not os.path.isfile( commit_file_path ):
 			self.log_error( "Failed to find commit file '{0}'" . format( commit_file_path ) )
 			return False
 
-		returncode, output, error = self.run_command( 'commit --file={0} {1}' . format( commit_file_path, shlex.quote( path ) ) )
+		files_to_commit = '' # passed in paths will be a set of 1 or more items
+
+		for path in paths:
+			files_to_commit += shlex.quote( path )
+
+		returncode, output, error = self.run_command( 'commit --file={0} {1}' . format( commit_file_path, files_to_commit ) )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -611,9 +633,9 @@ class SVN():
 			command += ' diff --diff-cmd={0} {1}' . format( diff_tool, shlex.quote( path ) )
 			self.run_command( command, in_background = True )
 			return ''
-		
+
 		command 		+= ' diff {0}' . format( shlex.quote( path ) )
-		returncode, output, error = self.run_command( command )		
+		returncode, output, error = self.run_command( command )
 
 		if returncode != 0:
 			self.log_error( error )
@@ -627,6 +649,24 @@ class SVN():
 		if returncode != 0:
 			self.log_error( error )
 			return ''
+
+		return output
+
+	def status( self, path, xml = True, quiet = False ):
+		command = 'status'
+
+		if xml:
+			command += ' --xml'
+		elif quiet:
+			command += ' --quiet'
+
+		command += ' {0}' . format( shlex.quote( path ) )
+
+		returncode, output, error = self.run_command( command )
+
+		if returncode != 0:
+			self.log_error( error )
+			return None
 
 		return output
 

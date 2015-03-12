@@ -640,7 +640,7 @@ class SVN():
 			command += '--revision={0}' . format( revision )
 
 		if diff_tool is not None:
-			command += ' diff --diff-cmd={0} {1}' . format( diff_tool, shlex.quote( path ) )
+			command += ' diff --diff-cmd={0} {1}' . format( shlex.quote( diff_tool ), shlex.quote( path ) )
 			self.run_command( command, in_background = True )
 			return ''
 

@@ -155,8 +155,8 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 		commit_panel.run_command( 'append', { 'characters': output } )
 		commit_panel.set_read_only( True )
 
-		self.delete_commit_file( file_path )
 		view.close()
+		self.delete_commit_file( file_path )
 
 	def on_close( self, view ):
 		file_path = view.file_name()

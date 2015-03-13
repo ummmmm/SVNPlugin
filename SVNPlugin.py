@@ -154,7 +154,7 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 		svn_plugin.release_locked_files( file_path )
 
 		sublime.set_timeout( lambda: view.close(), 100 )
-		sublime.set_timeout_async( lambda: self.delete_commit_file( file_path ), 100 )
+		sublime.set_timeout( lambda: self.delete_commit_file( file_path ), 1000 )
 		sublime.status_message( 'Commited file(s)' )
 
 	def on_close( self, view ):
@@ -165,7 +165,7 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 
 		svn_plugin.release_locked_files( file_path )
 
-		sublime.set_timeout( lambda: self.delete_commit_file( file_path ), 100)
+		sublime.set_timeout( lambda: self.delete_commit_file( file_path ), 1000 )
 		sublime.status_message( "Did not commit '{0}'" . format( view.file_name() ) )
 
 	def find_commit_revision( self, output ):
@@ -178,16 +178,12 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 		return matches.group( 1 )
 
 	def delete_commit_file( self, file_path ):
-		log( 'Trying to delete' )
 		if os.path.isfile( file_path ):
 			try:
 				os.remove( file_path )
-				log( 'Deleted' )
 			except:
-				log( 'Failed to delete' )
 				return False
 
-		log( 'Good delete' )
 		return True
 
 #

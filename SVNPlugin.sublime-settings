@@ -1,0 +1,31 @@
+{
+	// will log any errors to the console
+	"log_errors": true,
+
+	// will log all SVN commands to the console
+	"svn_log_commands": true,
+
+	// will show a panel containing commit messages when navigating file revisions
+	"svn_log_panel": true,
+
+	// the maximum number of revisions to load for a file
+	"svn_log_limit": 100,
+
+	// the diff tool to use when running svn diff
+	// if left blank, the diff output will open in a new file
+	"svn_diff_tool": "/usr/bin/meld",
+
+	// the path to the SVN binary application
+	"svn_binary": "/usr/bin/svn",
+
+	// will copy the string to the clipboard in the defined format on successful file commits
+	// the $revision token holds the revision number
+	"svn_commit_clipboard": "Fixed as of revision #$revision.",
+
+	// directory where old file revisions will be opened
+	// if left blank, the file revision content will open in a new file
+	"svn_revisions_temp_directory": "/tmp",
+
+	// the SVN directories
+	"svn_directories": [ "/home/dcarver/public_html", "/var/www/html" ]
+}

@@ -1,0 +1,13 @@
+[
+	{ "keys": ["ctrl+m", "ctrl+c", "ctrl+f"], "command": "svn_commit", 	"args": { "file": 		true } },
+	{ "keys": ["ctrl+m", "ctrl+c", "ctrl+d"], "command": "svn_commit", 	"args": { "directory": 	true } },
+
+	{ "keys": ["ctrl+m", "ctrl+i", "ctrl+f"], "command": "svn_info", 	"args": { "file": 		true } },
+	{ "keys": ["ctrl+m", "ctrl+i", "ctrl+d"], "command": "svn_info", 	"args": { "directory": 	true } },
+
+	{ "keys": ["ctrl+m", "ctrl+u", "ctrl+f"], "command": "svn_update", 	"args": { "file": 		true } },
+	{ "keys": ["ctrl+m", "ctrl+u", "ctrl+d"], "command": "svn_update", 	"args": { "directory": 	true } },
+
+	{ "keys": ["ctrl+m", "ctrl+d", "ctrl+f"], "command": "svn_diff", 	"args": { "file": 		true } },
+	{ "keys": ["ctrl+m", "ctrl+d", "ctrl+d"], "command": "svn_diff", 	"args": { "directory": 	true } },
+]

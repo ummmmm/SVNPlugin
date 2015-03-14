@@ -778,9 +778,19 @@ class SVNPlugin():
 
 class SVNPluginSettings():
 	def __init__( self ):
-		self.settings = sublime.load_settings( 'SVNPlugin.sublime-settings' )
+		self.settings 	= None
+		self.loaded		= False
+
+	def load_settings( self ):
+		if self.loaded:
+			return
+
+		self.settings 	= sublime.load_settings( 'SVNPlugin.sublime-settings' )
+		self.loaded		= True
 
 	def log_errors( self ):
+		self.load_settings()
+
 		value = self.settings.get( 'log_errors' )
 
 		if type( value ) is not bool:
@@ -789,6 +799,8 @@ class SVNPluginSettings():
 		return self.settings.get( 'log_errors' )
 
 	def svn_binary( self ):
+		self.load_settings()
+
 		value = self.settings.get( 'svn_binary' )
 
 		if type( value ) is not str:
@@ -797,6 +809,8 @@ class SVNPluginSettings():
 		return value
 
 	def svn_log_commands( self ):
+		self.load_settings()
+
 		value = self.settings.get( 'svn_log_commands' )
 
 		if type( value ) is not bool:
@@ -805,6 +819,8 @@ class SVNPluginSettings():
 		return value
 
 	def svn_log_panel( self ):
+		self.load_settings()
+
 		value = self.settings.get( 'svn_log_panel' )
 
 		if type( value ) is not bool:
@@ -813,6 +829,8 @@ class SVNPluginSettings():
 		return value
 
 	def svn_log_limit( self ):
+		self.load_settings()
+
 		value = self.settings.get( 'svn_log_limit' )
 
 		if type( value ) is not int or value < 0:
@@ -821,6 +839,8 @@ class SVNPluginSettings():
 		return value
 
 	def svn_diff_tool( self ):
+		self.load_settings()
+
 		value = self.settings.get( 'svn_diff_tool' )
 
 		if type( value ) is not str:
@@ -829,6 +849,8 @@ class SVNPluginSettings():
 		return value
 
 	def svn_binary( self ):
+		self.load_settings()
+
 		value = self.settings.get( 'svn_binary' )
 
 		if type( value ) is not str:
@@ -837,6 +859,8 @@ class SVNPluginSettings():
 		return value
 
 	def svn_commit_clipboard( self ):
+		self.load_settings()
+
 		value = self.settings.get( 'svn_commit_clipboard' )
 
 		if type( value ) is not str:
@@ -845,6 +869,8 @@ class SVNPluginSettings():
 		return value
 
 	def svn_directories( self ):
+		self.load_settings()
+
 		value = self.settings.get( 'svn_directories' )
 
 		if type( value ) is not list:
@@ -853,6 +879,8 @@ class SVNPluginSettings():
 		return value
 
 	def svn_revisions_temp_directory( self ):
+		self.load_settings()
+
 		value = self.settings.get( 'svn_revisions_temp_directory' )
 
 		if type( value ) is not str:

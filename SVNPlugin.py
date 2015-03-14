@@ -521,7 +521,7 @@ class SVN():
 			return []
 
 		for child in root.iter( 'logentry' ):
-			revisions.append( { 'path': path, 'number': child.attrib['revision'], 'author': child[ 0 ].text, 'date': child[ 1 ].text, 'message': child[ 2 ].text.strip() } )
+			revisions.append( { 'path': path, 'number': child.attrib[ 'revision' ], 'author': child[ 0 ].text, 'date': child[ 1 ].text, 'message': child[ 2 ].text } )
 
 		self.cached_revisions[ path ] = revisions
 

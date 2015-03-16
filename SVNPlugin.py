@@ -3,6 +3,7 @@ import os
 import re
 import shlex
 import subprocess
+import threading
 import xml.etree.ElementTree as ET
 
 #
@@ -260,7 +261,7 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		if code == 'af':
 			return self.svn.add_file( file_path )
 		elif code == 'vr':
-			return self.revisions_quick_panel( file_path )
+			return self.revisionlist_load( file_path )
 		elif code == 'cf':
 			return self.window.run_command( 'svn_commit', { 'file_path': file_path } )
 		elif code == 'rf':
@@ -268,9 +269,12 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		elif code == 'df':
 			return self.window.run_command( 'svn_diff', { 'file_path': file_path } )
 
+	def revisionlist_load( self, file_path ):
+		thread = RevisionListLoadThread( self.svn, file_path, self.revisions_quick_panel )
+		thread.start()
+		ThreadProgress( thread, 'Loading revisions' )
 
-	def revisions_quick_panel( self, file_path ):
-		revisions 			= self.svn.get_revisions( file_path, plugin_settings.svn_log_limit() )
+	def revisions_quick_panel( self, file_path, revisions ):
 		revisions_formatted = [ [ '..' ] ]
 
 		for revision in revisions:
@@ -302,7 +306,7 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		code = entries[ index ][ 'code' ]
 
 		if code == 'up':
-			return self.revisions_quick_panel( file_path )
+			return self.revisions_quick_panel( file_path, revisions )
 
 		revision = revisions[ revision_index ]
 
@@ -459,6 +463,54 @@ class SvnUpdateCommand( sublime_plugin.WindowCommand ):
 		panel.set_read_only( False )
 		panel.run_command( 'insert', { 'characters': svn.update( path ) } )
 		panel.set_read_only( True )
+
+#
+# Thread Functionality
+#
+
+class ThreadProgress():
+	def __init__( self, thread, message, success_message = '' ):
+		self.thread 			= thread
+		self.message 			= message
+		self.success_message 	= success_message
+		self.addend 			= 1
+		self.size 				= 8
+
+		sublime.set_timeout( lambda: self.run( 0 ), 100 )
+
+	def run( self, i ):
+		if not self.thread.is_alive():
+			if hasattr( self.thread, 'result' ) and not self.thread.result:
+				return sublime.status_message('')
+
+			return sublime.status_message( self.success_message )
+
+		before 	= i % self.size
+		after 	= ( self.size - 1 ) - before
+
+		sublime.status_message( '{0} [{1}={2}]' . format( self.message, ' ' * before, ' ' * after ) )
+
+		if not after:
+			self.addend = -1
+
+		if not before:
+			self.addend = 1
+
+		i += self.addend
+
+		sublime.set_timeout( lambda: self.run( i ), 100 )
+
+class RevisionListLoadThread( threading.Thread ):
+	def __init__( self, svn, file_path, on_complete ):
+		self.svn 			= svn
+		self.file_path		= file_path
+		self.on_complete	= on_complete
+		threading.Thread.__init__( self )
+
+	def run( self ):
+		revisions = self.svn.get_revisions( self.file_path, plugin_settings.svn_log_limit() )
+
+		sublime.set_timeout( lambda: self.on_complete( self.file_path, revisions ) )
 
 #
 # Helper Classes

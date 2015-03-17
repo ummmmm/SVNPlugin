@@ -9,5 +9,5 @@
 	{ "keys": ["ctrl+m", "ctrl+u", "ctrl+d"], "command": "svn_update", 	"args": { "directory": 	true } },
 
 	{ "keys": ["ctrl+m", "ctrl+d", "ctrl+f"], "command": "svn_diff", 	"args": { "file": 		true } },
-	{ "keys": ["ctrl+m", "ctrl+d", "ctrl+d"], "command": "svn_diff", 	"args": { "directory": 	true } },
+	{ "keys": ["ctrl+m", "ctrl+d", "ctrl+d"], "command": "svn_diff", 	"args": { "directory": 	true } }
 ]

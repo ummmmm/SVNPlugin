@@ -121,9 +121,6 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 		current_viewed_file	= view.window().active_view().file_name()
 
 		if file_path not in svn_plugin.commit_files or file_path != current_viewed_file:
-			print(svn_plugin.commit_files)
-			print(file_path)
-			print(current_viewed_file)
 			return
 
 		settings			= Settings()

@@ -4,39 +4,59 @@ import shlex
 import xml.etree.ElementTree as ET
 import subprocess
 import json
+import collections
 
 from .settings import Settings
 
 class SVN():
-	def __init__( self ):
+	def __init__( self, path = None, binary = '/usr/bin/svn', log_commands = False, log_errors = False ):
+		self.path				= None
+		self.binary				= binary
+		self.log_errors			= log_errors
+		self.log_commands		= log_commands
 		self.valid				= False
 		self.settings			= Settings()
-		self.svn_binary			= self.settings.svn_binary()
 		self.cached_path_info	= dict()
 		self.directories		= self.valid_directories()
+		self.results			= dict()
 
-		if self.svn_binary is None:
+		if self.binary is None:
 			sublime.error_message( 'An SVN binary program needs to be set in user settings!' )
 			return
-		elif not os.access( self.svn_binary, os.X_OK ):
+		elif not os.access( self.binary, os.X_OK ):
 			sublime.error_message( 'The SVN binary needs to be executable!' )
 			return
 
 		self.valid				= True
 
+	def change_path( self, path ):
+		self.path = path
+
+	def info( self, path ):
+		self.run_command( 'info --xml {0}' . format( shlex.quote( path ) ) )
+
+		if self.results[ 'returncode' ] != 0:
+			return False
+
+		return True
+
+	def log( self, revision = None ):
+		if revision is None:
+			return self.run_command( 'log --xml {0}' . format( shlex.quote( self.path ) ) )
+		
+		return self.run_command( 'log --xml --revision={0} {1}' . format( revision, shlex.quote( self.path ) ) )
+
+	def add( self ):
+		return self.run_command( 'add {0}' . format( shlex.quote( self.path ) ) )
+
+	def remove( self ):
+		return self.run_command( 'remove {0}' . format( shlex.quote( self.path ) ) )
+
+	def revert( self ):
+		return self.run_command( 'revert {0}' . format( shlex.quote( self.path ) ) )
+
 	def valid_directories( self ):
 		directories 		= set()
-		defined_directories	= self.settings.svn_directories()
-
-		if type( defined_directories ) is not list:
-			self.log_error( 'Invalid SVN directory type' )
-			return []
-
-		for directory in defined_directories:
-			normpath = os.path.normpath( directory )
-
-			if self.is_tracked( normpath ):
-				directories.add( normpath )
 
 		return list( directories )
 
@@ -137,7 +157,10 @@ class SVN():
 
 		return output
 
-	def is_tracked( self, file_path ):
+	def is_tracked( self, file_path = None ):
+		if file_path is None:
+			file_path = self.path
+
 		if file_path in self.cached_path_info:
 			return self.cached_path_info[ file_path ][ 'is_tracked' ]
 
@@ -269,48 +292,41 @@ class SVN():
 		return output
 
 	def update( self, path ):
-		returncode, output, error = self.run_command( 'update {0}' . format( shlex.quote( path ) ) )
+		self.run_command( 'update {0}' . format( shlex.quote( path ) ) )
 
-		if returncode != 0:
-			self.log_error( error )
-			return ''
+		if self.results[ 'returncode' ] != 0:
+			return False
 
-		return output
+		return True
 
-	def status( self, path, xml = True, quiet = False ):
-		command = 'status'
+	def status( self, path ):
+		self.run_command( 'status --xml {0}' . format( shlex.quote( path ) ) )
 
-		if xml:
-			command += ' --xml'
-		elif quiet:
-			command += ' --quiet'
+		if self.results[ 'returncode' ] != 0:
+			return False
 
-		command += ' {0}' . format( shlex.quote( path ) )
-
-		returncode, output, error = self.run_command( command )
-
-		if returncode != 0:
-			self.log_error( error )
-			return None
-
-		return output
+		return True
 
 	def run_command( self, command, in_background = False ):
-		command = '{0} {1}' . format( self.svn_binary, command )
+		command = '{0} {1}' . format( self.binary, command )
 
-		if self.settings.svn_log_commands():
-			print( command )
+		print( command )
 
 		if in_background:
 			subprocess.Popen( command, shell = True, cwd = '/tmp' )
-		else:
-			process			= subprocess.Popen( command, stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = True, cwd = '/tmp' )
-			stdout, stderr	= process.communicate()
-			stdout 			= stdout.decode()
-			stderr 			= stderr.decode()
-			return process.returncode, stdout, stderr
 
-		return None
+			self.results = { 'returncode': 0, 'stdout': '', 'stderr': '' }
+
+			return
+
+		process			= subprocess.Popen( command, stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = True, cwd = '/tmp' )
+		stdout, stderr	= process.communicate()
+		stdout 			= stdout.decode()
+		stderr 			= stderr.decode()
+		
+		self.results = { 'returncode': process.returncode, 'stdout': stdout, 'stderr': stderr }
+
+		return
 
 	def in_svn_directory( self, file_path ):
 		if file_path is None:
@@ -336,7 +352,6 @@ class SVN():
 
 		return None
 
-
 	def log_error( self, error ):
-		if self.settings.log_errors():
+		if self.log_errors:
 			print( error )

@@ -2,6 +2,7 @@ import sublime, sublime_plugin
 import os
 
 from ..svn import SVN
+from ..repository import Repository
 from ..settings import Settings
 from ..thread_progress import ThreadProgress
 from ..threads.revision_file import RevisionFileThread
@@ -16,8 +17,10 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		if ( file == directory ):
 			return
 
-		self.svn					= SVN()
 		self.settings				= Settings()
+		log_commands				= self.settings.svn_log_commands()
+		log_errors					= self.settings.log_errors()
+		self.svn					= SVN( log_commands = log_commands, log_errors = log_errors )
 		self.file_path				= self.window.active_view().file_name()
 		self.commit_panel			= None
 		self.validate_file_paths	= set()
@@ -32,13 +35,21 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 
 
 	def info_directory_quick_panel( self ):
-		self.show_quick_panel( self.svn.directories, self.info_directory_callback )
+		directories = set()
 
-	def info_directory_callback( self, index ):
+		for directory in self.settings.svn_directories():
+			svn = SVN( path = directory )
+
+			if svn.is_tracked():
+				directories.add( directory )
+
+		self.show_quick_panel( list( directories ), lambda index: self.info_directory_callback( list( directories ), index ) )
+
+	def info_directory_callback( self, directories, index ):
 		if index == -1:
 			return
 
-		directory = self.svn.directories[ index ]
+		directory = directories[ index ]
 
 		directory_entries = [ { 'code': 'up', 'value': '..' }, { 'code': 'vf', 'value': 'View Files' }, { 'code': 'vr', 'value': 'View Revisions' } ]
 

@@ -5,16 +5,17 @@ import re
 
 from ..svn import SVN
 from ..settings import Settings
-from ..tracked_files import TrackedFiles
 
-svn_plugin 			= TrackedFiles()
 NOT_SVN_DIRECTORY	= 'Directory is not a listed SVN repository'
 NOT_SVN_FILE		= 'File is not in a listed SVN repository'
 EDITOR_EOF_PREFIX 	= '--This line, and those below, will be ignored--\n'
 
 class SvnCommitCommand( sublime_plugin.WindowCommand ):
 	def run( self, file = False, directory = False, file_path = None, directory_path = None ):
-		svn						= SVN()
+		settings				= Settings()
+		log_commands			= settings.svn_log_commands()
+		log_errors				= settings.log_errors()
+		svn						= SVN( log_commands = log_commands, log_errors = log_errors )
 		self.commit_file_path 	= ''
 		current_file_path		= self.window.active_view().file_name()
 
@@ -55,7 +56,7 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 		try:
 			root = ET.fromstring( xml )
 		except ET.ParseError:
-			svn_plugin.log_error( 'Failed to parse XML' )
+			self.log_error( 'Failed to parse XML' )
 			return
 
 		try:
@@ -67,7 +68,7 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 					files.add( entry_path )
 
 		except KeyError as e:
-			svn_plugin.log_error( 'Failed to find key {0}' . format( str( e ) ) )
+			self.log_error( 'Failed to find key {0}' . format( str( e ) ) )
 			return
 
 		if len( files ) == 0:
@@ -78,12 +79,8 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 		if not self.create_commit_file( content ):
 			return sublime.error_message( 'Failed to create commit file' )
 
-		if not svn_plugin.add_locked_files( files ):
-			return sublime.error_message( 'One or more files are currently locked' )
-
-		svn_plugin.add_commit_file( self.commit_file_path, files )
-
-		self.window.open_file( '{0}:0:0' . format( self.commit_file_path ), sublime.ENCODED_POSITION )
+		view = self.window.open_file( '{0}:0:0' . format( self.commit_file_path ), sublime.ENCODED_POSITION )
+		view.settings().set( 'SVNPlugin', list( files ) )
 
 	def create_commit_file( self, message ):
 		valid_path = False
@@ -98,7 +95,7 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 				break
 
 		if not valid_path:
-			self.svn_plugin.log_error( 'Failed to create a unique file name' )
+			self.self.log_error( 'Failed to create a unique file name' )
 			return False
 
 		try:
@@ -108,31 +105,35 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 				fh.write( '\n' )
 				fh.write( message )
 		except Exception as e:
-			svn_plugin.log_error( "Failed to create commit file '{0}'" . format( file_path ) )
+			self.log_error( "Failed to create commit file '{0}'" . format( file_path ) )
 			return False
 
 		self.commit_file_path = file_path
 
 		return True
 
+	def log_error( self, error ):
+		if self.settings.log_errors():
+			print( error )
+
 class SvnCommitSave( sublime_plugin.EventListener ):
 	def on_post_save( self, view ):
-		file_path 			= view.file_name()
-		current_viewed_file	= view.window().active_view().file_name()
-
-		if file_path not in svn_plugin.commit_files or file_path != current_viewed_file:
+		if not view.settings().has( 'SVNPlugin' ):
 			return
 
+		files_to_commit = view.settings().get( 'SVNPlugin' )
+
+		if len( files_to_commit ) == 0:
+			return sublime.error_message( 'No files to commit' )
+
+
+		file_path 			= view.file_name()
 		settings			= Settings()
 		svn					= SVN()
-		files_to_commit		= svn_plugin.commit_files[ file_path ]
 		clipboard_format	= settings.svn_commit_clipboard()
 
 		if not svn.valid:
 			return
-
-		if len( files_to_commit ) == 0:
-			return sublime.message_dialog( 'No files to commit' )
 
 		message 	= view.substr( sublime.Region( 0, view.size() ) )
 		prefix_pos	= message.find( EDITOR_EOF_PREFIX )
@@ -155,21 +156,18 @@ class SvnCommitSave( sublime_plugin.EventListener ):
 			if commit_revision is not None:
 				sublime.set_clipboard( clipboard_format.replace( '$revision', commit_revision ) )
 
-		svn_plugin.release_locked_files( file_path )
+		view.settings().erase( 'SVNPlugin' )
 
-		sublime.set_timeout( lambda: view.close(), 100 )
+		sublime.set_timeout( lambda: view.close(), 50 )
 		sublime.set_timeout( lambda: self.delete_commit_file( file_path ), 1000 )
 		sublime.status_message( 'Commited file(s)' )
 
 	def on_close( self, view ):
-		file_path = view.file_name()
-
-		if file_path not in svn_plugin.commit_files:
+		if not view.settings().has( 'SVNPlugin' ):
 			return
 
-		svn_plugin.release_locked_files( file_path )
-
-		sublime.set_timeout( lambda: self.delete_commit_file( file_path ), 1000 )
+		file_path1 = view.file_name()
+		sublime.set_timeout( lambda: self.delete_commit_file( file_path1 ), 1000 )
 		sublime.status_message( "Did not commit '{0}'" . format( view.file_name() ) )
 
 	def find_commit_revision( self, output ):

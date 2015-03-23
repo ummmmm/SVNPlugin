@@ -1,4 +1,3 @@
-import sublime
 import threading
 
 class DiffPathThread( threading.Thread ):
@@ -10,7 +9,4 @@ class DiffPathThread( threading.Thread ):
 		threading.Thread.__init__( self )
 
 	def run( self ):
-		if not self.repository.diff( revision_number = self.revision_number, diff_tool = self.diff_tool ):
-			return sublime.error_message( self.repository.error )
-
-		sublime.set_timeout( lambda: self.on_complete( self.repository.svn_output ) )
+		self.on_complete( self.repository.diff( revision_number = self.revision_number, diff_tool = self.diff_tool ) )

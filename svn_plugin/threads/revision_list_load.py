@@ -2,14 +2,12 @@ import sublime
 import threading
 
 class RevisionListLoadThread( threading.Thread ):
-	def __init__( self, svn, settings, file_path, on_complete ):
-		self.svn 			= svn
-		self.settings		= settings
-		self.file_path		= file_path
+	def __init__( self, repository, log_limit, revision, on_complete ):
+		self.repository 	= repository
+		self.log_limit		= log_limit
+		self.revision		= revision
 		self.on_complete	= on_complete
 		threading.Thread.__init__( self )
 
 	def run( self ):
-		revisions = self.svn.get_revisions( self.file_path, self.settings.svn_log_limit() )
-
-		sublime.set_timeout( lambda: self.on_complete( self.file_path, revisions ) )
+		self.on_complete( self.repository.log( self.log_limit, self.revision ) )

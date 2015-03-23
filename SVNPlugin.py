@@ -1,6 +1,5 @@
 import sys
 import imp
-import os.path
 
 reloader_name = 'SVNPlugin.svn_plugin.reloader'
 

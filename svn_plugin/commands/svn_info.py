@@ -1,16 +1,14 @@
 import sublime, sublime_plugin
+
 import os
+import xml.etree.ElementTree as ET
 
-from ..svn import SVN
-from ..repository import Repository
-from ..settings import Settings
-from ..thread_progress import ThreadProgress
-from ..threads.revision_file import RevisionFileThread
-from ..threads.annotate_file import AnnotateFileThread
-from ..threads.revision_list_load import RevisionListLoadThread
-
-NOT_SVN_DIRECTORY	= 'Directory is not a listed SVN repository'
-NOT_SVN_FILE		= 'File is not in a listed SVN repository'
+from ..settings 					import Settings
+from ..repository 					import Repository
+from ..thread_progress 				import ThreadProgress
+from ..threads.revision_file 		import RevisionFileThread
+from ..threads.annotate_file 		import AnnotateFileThread
+from ..threads.revision_list_load 	import RevisionListLoadThread
 
 class SvnInfoCommand( sublime_plugin.WindowCommand ):
 	def run( self, file = False, directory = False ):
@@ -18,72 +16,80 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 			return
 
 		self.settings				= Settings()
-		log_commands				= self.settings.svn_log_commands()
-		log_errors					= self.settings.log_errors()
-		self.svn					= SVN( log_commands = log_commands, log_errors = log_errors )
+		self.repository				= None
 		self.file_path				= self.window.active_view().file_name()
 		self.commit_panel			= None
 		self.validate_file_paths	= set()
-
-		if not self.svn.valid:
-			return
+		self.__error				= ''
 
 		if directory:
-			return self.info_directory_quick_panel()
+			return self.repository_quick_panel()
 
-		return self.info_file_quick_panel( self.file_path )
+		return self.file_quick_panel( self.file_path )
 
+	def repository_quick_panel( self ):
+		self.repository = Repository()
 
-	def info_directory_quick_panel( self ):
-		directories = set()
+		self.repository.valid_repositories()
 
-		for directory in self.settings.svn_directories():
-			svn = SVN( path = directory )
+		if len( self.repository.repositories ) == 0:
+			return sublime.error_message( 'No repositories configured' )
 
-			if svn.is_tracked():
-				directories.add( directory )
+		self.show_quick_panel( [ repository for repository in self.repository.repositories ], lambda index: self.repository_quick_panel_callback( list( self.repository.repositories ), index ) )
 
-		self.show_quick_panel( list( directories ), lambda index: self.info_directory_callback( list( directories ), index ) )
-
-	def info_directory_callback( self, directories, index ):
+	def repository_quick_panel_callback( self, repositories, index ):
 		if index == -1:
 			return
 
-		directory = directories[ index ]
+		path 			= repositories[ index ]
+		self.repository = Repository( path )
 
-		directory_entries = [ { 'code': 'up', 'value': '..' }, { 'code': 'vf', 'value': 'View Files' }, { 'code': 'vr', 'value': 'View Revisions' } ]
+		entries = [ { 'code': 'up', 'value': '..' }, { 'code': 'vf', 'value': 'View Files' }, { 'code': 'vr', 'value': 'View Revisions' } ]
 
-		if self.svn.is_modified( directory ):
-			directory_entries.insert( 2, { 'code': 'mf', 'value': 'View Modified Files' } )
+		if self.repository.is_modified():
+			entries.insert( 2, { 'code': 'mf', 'value': 'View Modified Files' } )
 
-		self.show_quick_panel( [ entry[ 'value' ] for entry in directory_entries ], lambda index: self.directory_action_callback( directory_entries, index ) )
+		self.show_quick_panel( [ entry[ 'value' ] for entry in entries ], lambda index: self.repository_action_callback( entries, index ) )
 
-	def directory_action_callback( self, directory_entries, index ):
+	def repository_action_callback( self, repositories, index ):
 		if index == -1:
 			return
 		elif index == 0:
-			return self.info_directory_quick_panel()
+			return self.repository_quick_panel()
+
+		code = repositories[ index ][ 'code' ]
+
+		if code == 'vr':
+			return self.repository_revisions()
+
+	def repository_revisions( self ):
+		thread = RevisionListLoadThread( self.repository, log_limit = self.settings.svn_log_limit(), revision = None, on_complete = self.repository_revisions_callback )
+		thread.start()
+		ThreadProgress( thread, 'Loading revisions' )
+
+	def repository_revisions_callback( self, result ):
+		if not result:
+			return sublime.error_message( self.repository.svn_error )
 
 
-	def info_file_quick_panel( self, file_path ):
-		if file_path not in self.validate_file_paths:
-			if not self.svn.in_svn_directory( self.file_path ):
-				sublime.error_message( NOT_SVN_FILE )
-				return
+	def file_quick_panel( self, file_path ):
+		if self.repository is None or self.repository.path != file_path:
+			self.repository = Repository( file_path )
 
-			self.validate_file_paths.add( file_path )
+			if not self.repository.valid():
+				return sublime.error_message( self.repository.error )
 
-		if not self.svn.is_tracked( file_path ):
+		if not self.repository.is_tracked():
 			top_level_file_entries = [ { 'code': 'af', 'value': 'Add File to Repository' } ]
 		else:
 			top_level_file_entries = [ { 'code': 'vr', 'value': 'Revisions' } ]
 
-			if self.svn.is_modified( file_path ):
+			if self.repository.is_modified():
 				top_level_file_entries.extend( [ { 'code': 'cf', 'value': 'Commit' }, { 'code': 'rf', 'value': 'Revert' }, { 'code': 'df', 'value': 'Diff' } ] )
 
-		self.show_quick_panel( [ entry[ 'value' ] for entry in top_level_file_entries ], lambda index: self.info_file_callback( file_path, top_level_file_entries, index ) )
+		self.show_quick_panel( [ entry[ 'value' ] for entry in top_level_file_entries ], lambda index: self.file_quick_panel_callback( file_path, top_level_file_entries, index ) )
 
-	def info_file_callback( self, file_path, entries, index ):
+	def file_quick_panel_callback( self, file_path, entries, index ):
 		if index == -1:
 			return
 
@@ -91,63 +97,137 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		code 	= entries[ index - offset ][ 'code' ]
 
 		if code == 'af':
-			return self.svn.add_file( file_path )
-		elif code == 'vr':
-			return self.revisionlist_load( file_path )
-		elif code == 'cf':
-			return self.window.run_command( 'svn_commit', { 'file_path': file_path } )
+			return self.file_add()
 		elif code == 'rf':
-			return self.svn.revert_file( file_path )
+			return self.file_revert()
+		elif code == 'vr':
+			return self.file_revisions()
+		elif code == 'cf':
+			return self.file_commit()
 		elif code == 'df':
-			return self.window.run_command( 'svn_diff', { 'file_path': file_path } )
+			return self.file_diff()
 
-	def revisionlist_load( self, file_path ):
-		thread = RevisionListLoadThread( self.svn, self.settings, file_path, self.revisions_quick_panel )
+	def file_add( self ):
+		if not self.repository.add():
+			return sublime.error_message( self.repository.error )
+
+		return sublime.status_message( 'File added to repository' )
+
+	def file_revert( self ):
+		if not sublime.ok_cancel_dialog( 'Are you sure you want to revert file:\n\n{0}' . format( self.repository.path ), 'Yes, revert' ):
+			return sublime.status_message( 'File not reverted' )
+
+		if not self.repository.revert():
+			return sublime.error_message( self.repository.error )
+
+		return sublime.status_message( 'File reverted' )
+
+	def file_commit( self ):
+		return self.window.run_command( 'svn_commit', { 'file_path': self.repository.path } )
+
+	def file_diff( self, revision = None ):
+		return self.window.run_command( 'svn_diff', { 'file_path': self.repository.path, 'revision': revision } )
+
+	def file_revisions( self ):
+		thread = RevisionListLoadThread( self.repository, log_limit = self.settings.svn_log_limit(), revision = None, on_complete = self.file_revisions_callback )
 		thread.start()
 		ThreadProgress( thread, 'Loading revisions' )
 
-	def revisions_quick_panel( self, file_path, revisions, selected_index = -1 ):
+	def file_revisions_callback( self, result ):
+		if not result:
+			return sublime.error_message( self.repository.error )
+
+		try:
+			root = ET.fromstring( self.repository.svn_output )
+		except ET.ParseError:
+			return self.log_error( 'Failed to parse XML' )
+
+		revisions = []
+
+		for child in root.getiterator( 'logentry' ):
+			revisions.append( { 'number': child.get( 'revision', '' ), 'author': child.findtext( 'author', '' ), 'date': child.findtext( 'date', '' ), 'message': child.findtext( 'msg', '' ) } )
+
+		self.revisions_quick_panel( revisions )
+
+	def file_annotate( self, revision ):
+		thread = AnnotateFileThread( self.repository, revision = revision, on_complete = self.file_annotate_callback )
+		thread.start()
+		ThreadProgress( thread, 'Loading annotation', 'Annotation loaded' )
+
+	def file_annotate_callback( self, result ):
+		if not result:
+			return sublime.error_message( self.repository.error )
+
+		current_syntax	= self.window.active_view().settings().get( 'syntax' )
+		view 			= self.window.new_file()
+
+		view.set_name( 'SVNPlugin: Annotation' )
+		view.set_syntax_file( current_syntax )
+		view.set_scratch( True )
+		view.run_command( 'append', { 'characters': self.repository.svn_output } )
+		view.set_read_only( True )
+
+	def file_revision( self, revision ):
+		thread = RevisionFileThread( self.repository, revision = revision, on_complete = self.file_revision_callback )
+		thread.start()
+		ThreadProgress( thread, 'Loading revision', 'Revision loaded' )
+
+	def file_revision_callback( self, result ):
+		if not result:
+			return sublime.error_message( self.repository.error )
+
+		current_syntax	= self.window.active_view().settings().get( 'syntax' )
+		view 			= self.window.new_file()
+
+		view.set_name( 'SVNPlugin: Revision' )
+		view.set_syntax_file( current_syntax )
+		view.set_scratch( True )
+		view.run_command( 'append', { 'characters': self.repository.svn_output } )
+		view.set_read_only( True )
+
+
+	def revisions_quick_panel( self, revisions, selected_index = -1 ):
 		revisions_formatted = [ [ '..' ] ]
 
 		for revision in revisions:
-			revisions_formatted.extend( [ self.revision_format( revision ) ] )
+			revisions_formatted.extend( [ 'r{0} | {1} | {2}' . format( revision[ 'number' ], revision[ 'author' ], revision[ 'date' ] ) ] )
 
-		self.show_quick_panel( revisions_formatted, lambda index: self.revision_callback_quick_panel( file_path, revisions, index ), lambda index: self.revision_highlight( revisions, index ), selected_index = selected_index )
+		self.show_quick_panel( revisions_formatted, lambda index: self.revisions_quick_panel_callback( revisions, index ), lambda index: self.revision_highlight( revisions, index ), selected_index = selected_index )
 
-	def revision_callback_quick_panel( self, file_path, revisions, index ):
+	def revisions_quick_panel_callback( self, revisions, index ):
 		self.hide_panel()
 
 		if index == -1:
 			return
 		elif index == 0:
-			return self.info_file_quick_panel( file_path )
+			return self.file_quick_panel( self.repository.path )
 
 		offset				= 1
 		revision_index 		= index - offset
 		entries 			= [ { 'code': 'up', 'value': '..' }, { 'code': 'vf', 'value': 'View' }, { 'code': 'af', 'value': 'Annotate' } ]
 
-		if revision_index != 0 or self.svn.is_modified( file_path ): # only show diff option if the current revision has been modified locally or it's an older revision
+		if revision_index != 0 or self.repository.is_modified(): # only show diff option if the current revision has been modified locally or it's an older revision
 			entries.insert( 2, { 'code': 'df', 'value': 'Diff' } )
 
-		self.show_quick_panel( [ entry[ 'value' ] for entry in entries ], lambda index: self.revision_action_callback( file_path, entries, revisions, revision_index, index ) )
+		self.show_quick_panel( [ entry[ 'value' ] for entry in entries ], lambda index: self.revision_action_callback( entries, revisions, revision_index, index ) )
 
-	def revision_action_callback( self, file_path, entries, revisions, revision_index, index ):
+	def revision_action_callback( self, entries, revisions, revision_index, index ):
 		if index == -1:
 			return
 
 		code = entries[ index ][ 'code' ]
 
 		if code == 'up':
-			return self.revisions_quick_panel( file_path, revisions, selected_index = revision_index + 1 )
+			return self.revisions_quick_panel( revisions, selected_index = revision_index + 1 )
 
 		revision = revisions[ revision_index ]
 
 		if code == 'vf':
-			return self.view_revision( revision[ 'path' ], revision[ 'number' ] )
+			return self.file_revision( revision = revision[ 'number' ] )
 		elif code == 'df':
-			return self.diff_revision( revision[ 'path' ], revision[ 'number' ] )
+			return self.file_diff( revision = revision[ 'number' ] )
 		elif code == 'af':
-			return self.annotate_revision( revision[ 'path' ], revision[ 'number' ] )
+			return self.file_annotate( revision = revision[ 'number' ] )
 
 	def revision_highlight( self, revisions, index ):
 		if index == -1:
@@ -159,49 +239,6 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		revision	= revisions[ index - offset ]
 
 		self.show_panel( revision[ 'message' ] )
-
-	def revision_format( self, revision ):
-		return 'r{0} | {1} | {2}' . format( revision[ 'number' ], revision[ 'author' ], revision[ 'date' ] )
-
-
-	def diff_revision( self, file_path, number ):
-		self.window.run_command( 'svn_diff', { 'file_path' : file_path, 'revision' : number } )
-
-	def annotate_revision( self, file_path, number ):
-		thread = AnnotateFileThread( self.svn, file_path, number, self.annotate_callback )
-		thread.start()
-		ThreadProgress( thread, 'Loading annotation of {0}' . format( file_path ) )
-
-	def annotate_callback( self, file_path, number, content ):
-		self.revision_or_annotate_output( 'a', file_path, number, content )
-
-	def view_revision( self, file_path, number ):
-		thread = RevisionFileThread( self.svn, file_path, number, self.revision_callback )
-		thread.start()
-		ThreadProgress( thread, 'Loading revision of {0}' . format( file_path ) )
-
-	def revision_callback( self, file_path, number, content ):
-		self.revision_or_annotate_output( 'r', file_path, number, content )
-
-	def revision_or_annotate_output( self, r_or_a, file_path, number, content ):
-		temp_directory	= self.settings.svn_revisions_temp_directory()
-		current_syntax	= self.window.active_view().settings().get( 'syntax' )
-
-		if temp_directory is not None and os.path.isdir( temp_directory ) and os.access( temp_directory, os.W_OK ):
-			try:
-				temp_file = os.path.join( temp_directory, 'r{0}-{1}-{2}' . format( number, r_or_a, os.path.basename( file_path ) ) )
-
-				with open( temp_file, 'w+' ) as fh:
-					fh.write( content )
-
-				view = self.window.open_file( temp_file )
-				view.set_syntax_file( current_syntax )
-			except:
-				svn_plugin.log_error( "Failed to create temp revision file '{0}'" . format( temp_file ) )
-		else:
-			view = self.window.new_file()
-			view.run_command( 'append', { 'characters': content } )
-			view.set_syntax_file( current_syntax )
 
 	def show_quick_panel( self, entries, on_select, on_highlight = None, selected_index = -1 ):
 		sublime.set_timeout( lambda: self.window.show_quick_panel( entries, on_select, on_highlight = on_highlight, selected_index = selected_index ), 10 )
@@ -218,3 +255,15 @@ class SvnInfoCommand( sublime_plugin.WindowCommand ):
 		if self.commit_panel:
 				self.window.run_command( 'hide_panel', { 'panel': 'output.svn_panel' } )
 				self.commit_panel = None
+
+	def log_error( self, error ):
+		self.__error = error
+
+		if self.settings.log_errors():
+			print( error )
+
+		return False
+
+	@property
+	def error( self ):
+		return self.__error

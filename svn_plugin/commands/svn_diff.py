@@ -10,7 +10,9 @@ class SvnDiffCommand( sublime_plugin.WindowCommand ):
 	def run( self, file = False, directory = False, file_path = None, directory_path = None, revision = None ):
 		settings 			= Settings()
 		current_file_path 	= self.window.active_view().file_name()
-		self.diff_tool		= settings.svn_diff_tool()
+
+		if current_file_path is None:
+			current_file_path = ''
 
 		if file:
 			path = current_file_path
@@ -23,22 +25,25 @@ class SvnDiffCommand( sublime_plugin.WindowCommand ):
 		else:
 			return
 
-		repository = Repository( path )
+		self.repository = Repository( path )
 
-		if not repository.valid():
-			return sublime.error_message( repository.error )
+		if not self.repository.valid():
+			return sublime.error_message( self.repository.error )
 
-		if not repository.is_tracked():
-			return sublime.error_message( repository.error )
+		if not self.repository.is_tracked():
+			return sublime.error_message( self.repository.error )
 
 		if revision is None:
-			if not repository.is_modified():
-				return sublime.error_message( repository.error )
+			if not self.repository.is_modified():
+				return sublime.error_message( self.repository.error )
 
-		thread = DiffPathThread( repository, revision, self.diff_tool, self.diff_callback )
+		thread = DiffPathThread( self.repository, revision, settings.svn_diff_tool(), self.diff_callback )
 		thread.start()
 		ThreadProgress( thread, 'Running diff on {0}' . format( path ) )
 
-	def diff_callback( self, output ):
-		if self.diff_tool is None:
-			self.window.new_file().run_command( 'append', { 'characters': output } )
+	def diff_callback( self, result ):
+		if not result:
+			return sublime.error_message( self.repository.error )
+
+		if self.repository.svn_output:
+			self.window.new_file().run_command( 'append', { 'characters': self.repository.svn_output } )

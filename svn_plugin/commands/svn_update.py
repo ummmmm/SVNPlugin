@@ -6,7 +6,7 @@ from ..repository 			import Repository
 from ..thread_progress 		import ThreadProgress
 from ..threads.update_path 	import UpdatePathThread
 
-class SvnUpdateCommand( sublime_plugin.WindowCommand ):
+class SvnPluginUpdateCommand( sublime_plugin.WindowCommand ):
 	def run( self, file = False, directory = False, file_path = None, directory_path = None ):
 		current_file_path = self.window.active_view().file_name()
 

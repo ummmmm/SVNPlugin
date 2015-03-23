@@ -10,7 +10,7 @@ from ..threads.revision_file 		import RevisionFileThread
 from ..threads.annotate_file 		import AnnotateFileThread
 from ..threads.revision_list_load 	import RevisionListLoadThread
 
-class SvnInfoCommand( sublime_plugin.WindowCommand ):
+class SvnPluginInfoCommand( sublime_plugin.WindowCommand ):
 	def run( self, file = False, directory = False ):
 		if ( file == directory ):
 			return

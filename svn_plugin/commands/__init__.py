@@ -1,13 +1,13 @@
-from .svn_commit	import SvnCommitCommand
-from .svn_commit	import SvnCommitSave
-from .svn_diff 		import SvnDiffCommand
-from .svn_info 		import SvnInfoCommand
-from .svn_update 	import SvnUpdateCommand
+from .svn_commit	import SvnPluginCommitCommand
+from .svn_commit	import SvnPluginCommitSave
+from .svn_diff 		import SvnPluginDiffCommand
+from .svn_info 		import SvnPluginInfoCommand
+from .svn_update 	import SvnPluginUpdateCommand
 
 __all__ = [
-	'SvnCommitCommand',
-	'SvnCommitSave',
-	'SvnDiffCommand',
-	'SvnInfoCommand',
-	'SvnUpdateCommand'
+	'SvnPluginCommitCommand',
+	'SvnPluginCommitSave',
+	'SvnPluginDiffCommand',
+	'SvnPluginInfoCommand',
+	'SvnPluginUpdateCommand'
 ]

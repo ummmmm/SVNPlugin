@@ -6,7 +6,7 @@ from ..repository 			import Repository
 from ..thread_progress 		import ThreadProgress
 from ..threads.diff_path 	import DiffPathThread
 
-class SvnDiffCommand( sublime_plugin.WindowCommand ):
+class SvnPluginDiffCommand( sublime_plugin.WindowCommand ):
 	def run( self, file = False, directory = False, file_path = None, directory_path = None, revision = None ):
 		settings 			= Settings()
 		current_file_path 	= self.window.active_view().file_name()

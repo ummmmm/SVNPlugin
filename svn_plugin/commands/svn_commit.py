@@ -2,15 +2,15 @@ import sublime, sublime_plugin
 
 import re
 import xml.etree.ElementTree as ET
+import os.path
 
-from os.path			import dirname
 from ..thread_progress	import ThreadProgress
 from ..repository 		import Repository
 from ..settings 		import Settings
 
 EDITOR_EOF_PREFIX 	= '--This line, and those below, will be ignored--\n'
 
-class SvnCommitCommand( sublime_plugin.WindowCommand ):
+class SvnPluginCommitCommand( sublime_plugin.WindowCommand ):
 	def __init__( self, window ):
 		self.window 			= window
 		self.settings			= Settings()
@@ -115,7 +115,7 @@ class SvnCommitCommand( sublime_plugin.WindowCommand ):
 	def error( self ):
 		return self.__error
 
-class SvnCommitSave( sublime_plugin.EventListener ):
+class SvnPluginCommitSave( sublime_plugin.EventListener ):
 	def on_post_save( self, view ):
 		if not view.settings().has( 'SVNPlugin' ):
 			return

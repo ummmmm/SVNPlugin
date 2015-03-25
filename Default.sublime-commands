@@ -1,7 +1,7 @@
 [
 	{
 		"caption": "SVN Plugin: Commit File",
-		"command": "svn_commit",
+		"command": "svn_plugin_commit",
 		"args":
 		{
 			"file": true
@@ -9,7 +9,7 @@
 	},
 	{
 		"caption": "SVN Plugin: Commit Directory",
-		"command": "svn_commit",
+		"command": "svn_plugin_commit",
 		"args":
 		{
 			"directory": true
@@ -17,7 +17,7 @@
 	},
 	{
 		"caption": "SVN Plugin: Diff File",
-		"command": "svn_diff",
+		"command": "svn_plugin_diff",
 		"args":
 		{
 			"file": true
@@ -25,15 +25,15 @@
 	},
 	{
 		"caption": "SVN Plugin: Diff Directory",
-		"command": "svn_diff",
+		"command": "svn_plugin_diff",
 		"args":
 		{
 			"directory": true
 		}
 	},
 	{
-		"caption": "SVN Plugin: Info Fiile",
-		"command": "svn_info",
+		"caption": "SVN Plugin: Info File",
+		"command": "svn_plugin_info",
 		"args":
 		{
 			"file": true
@@ -41,7 +41,7 @@
 	},
 	{
 		"caption": "SVN Plugin: Info Directory",
-		"command": "svn_info",
+		"command": "svn_plugin_info",
 		"args":
 		{
 			"directory": true

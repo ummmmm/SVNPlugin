@@ -24,6 +24,10 @@ module_load_order = [
 	'.threads.update_path',
 	'.threads',
 
+	'.eventlisteners.on_activated',
+	'.eventlisteners.on_post_save',
+	'.eventlisteners',
+
 	'.commands.svn_commit',
 	'.commands.svn_diff',
 	'.commands.svn_info',

@@ -12,6 +12,7 @@ mod_prefix = 'SVNPlugin.svn_plugin'
 module_load_order = [
 	'',
 
+	'.cache',
 	'.settings',
 	'.svn',
 	'.repository',
@@ -28,6 +29,8 @@ module_load_order = [
 	'.eventlisteners.on_post_save',
 	'.eventlisteners',
 
+	'.commands.svn_add',
+	'.commands.svn_annotate',
 	'.commands.svn_commit',
 	'.commands.svn_diff',
 	'.commands.svn_info',

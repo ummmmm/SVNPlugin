@@ -108,10 +108,7 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand ):
 			return self.file_diff()
 
 	def file_add( self ):
-		if not self.repository.add():
-			return sublime.error_message( self.repository.error )
-
-		return sublime.status_message( 'File added to repository' )
+		return self.window.run_command( 'svn_plugin_add', { 'path': self.repository.path } )
 
 	def file_revert( self ):
 		if not sublime.ok_cancel_dialog( 'Are you sure you want to revert file:\n\n{0}' . format( self.repository.path ), 'Yes, revert' ):
@@ -123,10 +120,10 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand ):
 		return sublime.status_message( 'File reverted' )
 
 	def file_commit( self ):
-		return self.window.run_command( 'svn_commit', { 'file_path': self.repository.path } )
+		return self.window.run_command( 'svn_plugin_commit', { 'path': self.repository.path } )
 
 	def file_diff( self, revision = None ):
-		return self.window.run_command( 'svn_diff', { 'file_path': self.repository.path, 'revision': revision } )
+		return self.window.run_command( 'svn_plugin_diff', { 'path': self.repository.path, 'revision': revision } )
 
 	def file_revisions( self ):
 		thread = RevisionListLoadThread( self.repository, log_limit = self.settings.svn_log_limit(), revision = None, on_complete = self.file_revisions_callback )
@@ -150,22 +147,7 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand ):
 		self.revisions_quick_panel( revisions )
 
 	def file_annotate( self, revision ):
-		thread = AnnotateFileThread( self.repository, revision = revision, on_complete = self.file_annotate_callback )
-		thread.start()
-		ThreadProgress( thread, 'Loading annotation', 'Annotation loaded' )
-
-	def file_annotate_callback( self, result ):
-		if not result:
-			return sublime.error_message( self.repository.error )
-
-		current_syntax	= self.window.active_view().settings().get( 'syntax' )
-		view 			= self.window.new_file()
-
-		view.set_name( 'SVNPlugin: Annotation' )
-		view.set_syntax_file( current_syntax )
-		view.set_scratch( True )
-		view.run_command( 'append', { 'characters': self.repository.svn_output } )
-		view.set_read_only( True )
+		return self.window.run_command( 'svn_plugin_file_annotate', { 'path': self.repository.path, 'revision': revision } )
 
 	def file_revision( self, revision ):
 		thread = RevisionFileThread( self.repository, revision = revision, on_complete = self.file_revision_callback )

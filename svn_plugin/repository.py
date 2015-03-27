@@ -3,7 +3,6 @@ import sublime
 import os
 import shlex
 import xml.etree.ElementTree as ET
-import subprocess
 import json
 import collections
 
@@ -69,7 +68,7 @@ class Repository():
 				if value == 'added' or value == 'deleted' or value == 'replaced' or value == 'modified' or value == 'merged' or value == 'conflicted':
 					return True
 
-		return self.log_error( 'No files have been modified' )
+		return False
 
 	def is_tracked( self ):
 		if not self.svn.info( self.path ):
@@ -160,7 +159,7 @@ class Repository():
 	def log_error( self, error ):
 		self.__error = error
 
-		print( error )
+		# print( error )
 
 		return False
 

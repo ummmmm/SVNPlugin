@@ -1,50 +1,60 @@
 [
 	{
-		"caption": "SVN Plugin: Commit File",
-		"command": "svn_plugin_commit",
-		"args":
-		{
-			"file": true
-		}
+		"caption": "SVN Plugin: (File) Add",
+		"command": "svn_plugin_file_add"
 	},
 	{
-		"caption": "SVN Plugin: Commit Directory",
-		"command": "svn_plugin_commit",
-		"args":
-		{
-			"directory": true
-		}
+		"caption": "SVN Plugin: (Folder) Add",
+		"command": "svn_plugin_folder_add"
+	},
+
+
+	{
+		"caption": "SVN Plugin: (File) Annotate",
+		"command": "svn_plugin_file_annotate"
+	},
+
+
+	{
+		"caption": "SVN Plugin: Commit",
+		"command": "svn_plugin_commit"
 	},
 	{
-		"caption": "SVN Plugin: Diff File",
-		"command": "svn_plugin_diff",
-		"args":
-		{
-			"file": true
-		}
+		"caption": "SVN Plugin: (File) Commit",
+		"command": "svn_plugin_file_commit"
 	},
 	{
-		"caption": "SVN Plugin: Diff Directory",
-		"command": "svn_plugin_diff",
-		"args":
-		{
-			"directory": true
-		}
+		"caption": "SVN Plugin: (Folder) Commit",
+		"command": "svn_plugin_folder_commit"
+	},
+
+
+
+	{
+		"caption": "SVN Plugin: Diff",
+		"command": "svn_plugin_diff"
 	},
 	{
-		"caption": "SVN Plugin: Info File",
-		"command": "svn_plugin_info",
-		"args":
-		{
-			"file": true
-		}
+		"caption": "SVN Plugin: (File) Diff",
+		"command": "svn_plugin_file_diff"
 	},
 	{
-		"caption": "SVN Plugin: Info Directory",
-		"command": "svn_plugin_info",
-		"args":
-		{
-			"directory": true
-		}
+		"caption": "SVN Plugin: (Folder) Diff",
+		"command": "svn_plugin_folder_diff"
+	},
+
+
+
+	{
+		"caption": "SVN Plugin: Update",
+		"command": "svn_plugin_update"
+	},
+	{
+		"caption": "SVN Plugin: (File) Update",
+		"command": "svn_plugin_file_update"
+	},
+	{
+		"caption": "SVN Plugin: (Folder) Update",
+		"command": "svn_plugin_folder_update"
 	}
 ]

@@ -1,13 +1,16 @@
 [
-	{ "keys": ["ctrl+m", "ctrl+c", "ctrl+f"], "command": "svn_plugin_commit", 	"args": { "file": 		true } },
-	{ "keys": ["ctrl+m", "ctrl+c", "ctrl+d"], "command": "svn_plugin_commit", 	"args": { "directory": 	true } },
+	{ "keys": ["ctrl+m", "ctrl+c", "ctrl+r"], "command": "svn_plugin_commit" },
+	{ "keys": ["ctrl+m", "ctrl+c", "ctrl+f"], "command": "svn_plugin_file_commit" },
+	{ "keys": ["ctrl+m", "ctrl+c", "ctrl+d"], "command": "svn_plugin_folder_commit" },
 
 	{ "keys": ["ctrl+m", "ctrl+i", "ctrl+f"], "command": "svn_plugin_info", 	"args": { "file": 		true } },
 	{ "keys": ["ctrl+m", "ctrl+i", "ctrl+d"], "command": "svn_plugin_info", 	"args": { "directory": 	true } },
 
-	{ "keys": ["ctrl+m", "ctrl+u", "ctrl+f"], "command": "svn_plugin_update", 	"args": { "file": 		true } },
-	{ "keys": ["ctrl+m", "ctrl+u", "ctrl+d"], "command": "svn_plugin_update", 	"args": { "directory": 	true } },
+	{ "keys": ["ctrl+m", "ctrl+u", "ctrl+r"], "command": "svn_plugin_update" },
+	{ "keys": ["ctrl+m", "ctrl+u", "ctrl+f"], "command": "svn_plugin_file_update" },
+	{ "keys": ["ctrl+m", "ctrl+u", "ctrl+d"], "command": "svn_plugin_folder_update" },
 
-	{ "keys": ["ctrl+m", "ctrl+d", "ctrl+f"], "command": "svn_plugin_diff", 	"args": { "file": 		true } },
-	{ "keys": ["ctrl+m", "ctrl+d", "ctrl+d"], "command": "svn_plugin_diff", 	"args": { "directory": 	true } }
+	{ "keys": ["ctrl+m", "ctrl+d", "ctrl+r"], "command": "svn_plugin_diff" },
+	{ "keys": ["ctrl+m", "ctrl+d", "ctrl+f"], "command": "svn_plugin_file_diff" },
+	{ "keys": ["ctrl+m", "ctrl+d", "ctrl+d"], "command": "svn_plugin_folder_diff" }
 ]

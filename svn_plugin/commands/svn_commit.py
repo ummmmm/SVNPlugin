@@ -3,49 +3,36 @@ import sublime, sublime_plugin
 import re
 import xml.etree.ElementTree as ET
 import os.path
+import tempfile
 
 from ..thread_progress	import ThreadProgress
 from ..repository 		import Repository
 from ..settings 		import Settings
+from ..cache			import Cache
 
 EDITOR_EOF_PREFIX 	= '--This line, and those below, will be ignored--\n'
 
 class SvnPluginCommitCommand( sublime_plugin.WindowCommand ):
 	def __init__( self, window ):
 		self.window 			= window
-		self.settings			= Settings()
 		self.commit_file_path 	= ''
 		self.__error 			= ''
 
-	def run( self, file = False, directory = False, file_path = None, directory_path = None ):
-		current_file_path = self.window.active_view().file_name()
+	def run( self, path = None ):
+		file_path = self.window.active_view().file_name()
 
-		if current_file_path is None:
-			current_file_path = ''
+		if path is None:
+			if not self.is_visible():
+				return
 
-		if file:
-			path = current_file_path
-		elif file_path:
-			path = file_path
-		elif directory:
-			path = dirname( current_file_path )
-		elif directory_path:
-			path = directory_path
-		else:
-			return
+			path = Cache.cached_files[ file_path ][ 'repository' ][ 'path' ]
 
-		self.repository = Repository( path )
+		repository = Repository( path )
 
-		if not self.repository.valid():
-			return sublime.error_message( self.repository.error )
+		if not repository.status():
+			return sublime.error_message( repository.error )
 
-		if not self.repository.is_tracked():
-			return sublime.error_message( self.repository.error )
-
-		if not self.repository.status():
-			return sublime.error_message( self.repository.error )
-
-		output 	= self.repository.svn_output
+		output 	= repository.svn_output
 		files 	= []
 
 		try:
@@ -73,13 +60,24 @@ class SvnPluginCommitCommand( sublime_plugin.WindowCommand ):
 		view = self.window.open_file( self.commit_file_path )
 		view.settings().set( 'SVNPlugin', [ file[ 'path'] for file in files ] )
 
+	def is_visible( self ):
+		file_path = self.window.active_view().file_name()
+
+		if file_path not in Cache.cached_files:
+			return False
+
+		if not Cache.cached_files[ file_path ][ 'repository' ][ 'tracked' ]:
+			return False
+
+		return Repository( file_path ).is_modified()
+
 	def create_commit_file( self, files ):
 		valid_path = False
 
 		for i in range( 100 ):
 			i = i if i > 0 else '' # do not append 0 to the commit file name
 
-			file_path = os.path.join( self.repository.current_repository, 'svn-commit{0}.tmp' . format( i ) )
+			file_path = os.path.join( tempfile.gettempdir(), 'svn-commit{0}.tmp' . format( i ) )
 
 			if not os.path.isfile( file_path ):
 				valid_path = True
@@ -106,7 +104,7 @@ class SvnPluginCommitCommand( sublime_plugin.WindowCommand ):
 	def log_error( self, error ):
 		self.__error = error
 
-		if self.settings.log_errors():
+		if Settings().log_errors():
 			print( error )
 
 		return False
@@ -114,3 +112,41 @@ class SvnPluginCommitCommand( sublime_plugin.WindowCommand ):
 	@property
 	def error( self ):
 		return self.__error
+
+class SvnPluginFileCommitCommand( sublime_plugin.WindowCommand ):
+	def run( self ):
+		if not self.is_visible():
+			return
+
+		file_path = self.window.active_view().file_name()
+		self.window.run_command( 'svn_plugin_commit', { 'path': Cache.cached_files[ file_path ][ 'file' ][ 'path' ] } )
+
+	def is_visible( self ):
+		file_path = self.window.active_view().file_name()
+
+		if file_path not in Cache.cached_files:
+			return False
+
+		if not Cache.cached_files[ file_path ][ 'file' ][ 'tracked' ]:
+			return False
+
+		return Repository( file_path ).is_modified()
+
+class SvnPluginFolderCommitCommand( sublime_plugin.WindowCommand ):
+	def run( self ):
+		if not self.is_visible():
+			return
+
+		file_path = self.window.active_view().file_name()
+		self.window.run_command( 'svn_plugin_commit', { 'path': Cache.cached_files[ file_path ][ 'folder' ][ 'path' ] } )
+
+	def is_visible( self ):
+		file_path = self.window.active_view().file_name()
+
+		if file_path not in Cache.cached_files:
+			return False
+
+		if not Cache.cached_files[ file_path ][ 'folder' ][ 'tracked' ]:
+			return False
+
+		return Repository( file_path ).is_modified()

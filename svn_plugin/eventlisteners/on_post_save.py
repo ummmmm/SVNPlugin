@@ -1,4 +1,5 @@
 import sublime, sublime_plugin
+import os
 
 class SvnPluginOnPostSave( sublime_plugin.EventListener ):
 	def on_post_save( self, view ):

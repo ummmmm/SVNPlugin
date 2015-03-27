@@ -69,7 +69,14 @@ class SVN():
 		return self.result()
 
 	def annotate( self, path, revision ):
-		self.run_command( [ 'annotate', '--revision', revision, path ] )
+		args = [ 'annotate' ]
+
+		if revision is not None:
+			args.extend( [ '--revision', revision ] )
+
+		args.append( path )
+
+		self.run_command( args )
 
 		return self.result()
 

@@ -1,36 +1,21 @@
 import sublime, sublime_plugin
 
-from os.path 				import dirname
-from ..settings 			import Settings
+from ..cache				import Cache
 from ..repository 			import Repository
 from ..thread_progress 		import ThreadProgress
 from ..threads.update_path 	import UpdatePathThread
 
 class SvnPluginUpdateCommand( sublime_plugin.WindowCommand ):
-	def run( self, file = False, directory = False, file_path = None, directory_path = None ):
-		current_file_path = self.window.active_view().file_name()
+	def run( self, path = None ):
+		file_path = self.window.active_view().file_name()
 
-		if current_file_path is None:
-			current_file_path = ''
+		if path is None:
+			if not self.is_visible():
+				return
 
-		if file:
-			path = current_file_path
-		elif file_path:
-			path = file_path
-		elif directory:
-			path = dirname( current_file_path )
-		elif directory_path:
-			path = directory_path
-		else:
-			return
+			path = Cache.cached_files[ file_path ][ 'repository' ][ 'path' ]
 
 		self.repository = Repository( path )
-
-		if not self.repository.valid():
-			return sublime.error_message( self.repository.error )
-
-		if not self.repository.is_tracked():
-			return sublime.error_message( self.repository.error )
 
 		thread = UpdatePathThread( self.repository, self.update_callback )
 		thread.start()
@@ -45,3 +30,43 @@ class SvnPluginUpdateCommand( sublime_plugin.WindowCommand ):
 		panel.set_read_only( False )
 		panel.run_command( 'insert', { 'characters': self.repository.svn_output } )
 		panel.set_read_only( True )
+
+	def is_visible( self ):
+		file_path = self.window.active_view().file_name()
+
+		if file_path not in Cache.cached_files:
+			return False
+
+		return Cache.cached_files[ file_path ][ 'repository' ][ 'tracked' ]
+
+class SvnPluginFileUpdateCommand( sublime_plugin.WindowCommand ):
+	def run( self ):
+		if not self.is_visible():
+			return
+
+		file_path = self.window.active_view().file_name()
+		self.window.run_command( 'svn_plugin_update', { 'path': Cache.cached_files[ file_path ][ 'file' ][ 'path' ] } )
+
+	def is_visible( self ):
+		file_path = self.window.active_view().file_name()
+
+		if file_path not in Cache.cached_files:
+			return False
+
+		return Cache.cached_files[ file_path ][ 'file' ][ 'tracked' ]
+
+class SvnPluginFolderUpdateCommand( sublime_plugin.WindowCommand ):
+	def run( self ):
+		if not self.is_visible():
+			return
+
+		file_path = self.window.active_view().file_name()
+		self.window.run_command( 'svn_plugin_update', { 'path': Cache.cached_files[ file_path ][ 'folder' ][ 'path' ] } )
+
+	def is_visible( self ):
+		file_path = self.window.active_view().file_name()
+
+		if file_path not in Cache.cached_files:
+			return False
+
+		return Cache.cached_files[ file_path ][ 'folder' ][ 'tracked' ]	

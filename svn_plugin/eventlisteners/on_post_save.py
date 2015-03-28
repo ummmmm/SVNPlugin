@@ -1,5 +1,11 @@
 import sublime, sublime_plugin
 import os
+import re
+
+from ..settings 	import Settings
+from ..repository 	import Repository
+
+EDITOR_EOF_PREFIX 	= '--This line, and those below, will be ignored--\n'
 
 class SvnPluginOnPostSave( sublime_plugin.EventListener ):
 	def on_post_save( self, view ):

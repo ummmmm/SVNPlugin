@@ -124,7 +124,7 @@ class SVN():
 	def run_command( self, args, block = True ):
 		args.insert( 0, self.binary )
 
-		command = ' ' . join( args )
+		command = ' ' . join( [ str( arg ) for arg in args ] )
 
 		if self.log_commands:
 			print( 'SVN Command:', command )

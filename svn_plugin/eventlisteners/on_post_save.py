@@ -27,7 +27,7 @@ class SvnPluginOnPostSave( sublime_plugin.EventListener ):
 			return sublime.message_dialog( 'Did not commit, log message unchanged or not specified' )
 
 		if not repository.commit( commit_file_path ):
-			return sublime.error_message( repository.error )
+			return sublime.error_message( repository.svn_error )
 
 		if clipboard_format is not None:
 			commit_revision = self.find_commit_revision( repository.svn_output )

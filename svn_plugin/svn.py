@@ -124,17 +124,7 @@ class SVN():
 	def run_command( self, args, block = True ):
 		args.insert( 0, self.binary )
 
-		escaped_args = []
-
-		for arg in args:
-			arg = str( arg )
-
-			if re.search( '^[a-zA-Z0-9/_^\\-\\.:]+$', arg ) == None:
-				arg = "'{0}'" . format( arg )
-
-			escaped_args.append( arg )
-
-		command = ' ' . join( escaped_args )
+		command = ' ' . join( args )
 
 		if self.log_commands:
 			print( 'SVN Command:', command )

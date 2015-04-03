@@ -46,6 +46,35 @@
 
 
 	{
+		"caption": "SVN Plugin: Info",
+		"command": "svn_plugin_info"
+	},
+	{
+		"caption": "SVN Plugin: (File) Info",
+		"command": "svn_plugin_file_info"
+	},
+	{
+		"caption": "SVN Plugin: (Folder) Info",
+		"command": "svn_plugin_folder_info"
+	},
+
+
+
+	{
+		"caption": "SVN Plugin: Status",
+		"command": "svn_plugin_status"
+	},
+	{
+		"caption": "SVN Plugin: (File) Status",
+		"command": "svn_plugin_file_status"
+	},
+	{
+		"caption": "SVN Plugin: (Folder) Status",
+		"command": "svn_plugin_folder_status"
+	},
+
+
+	{
 		"caption": "SVN Plugin: Update",
 		"command": "svn_plugin_update"
 	},

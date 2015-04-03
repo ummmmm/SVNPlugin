@@ -1,32 +1,27 @@
 import sublime
 import os
-import shlex
-import xml.etree.ElementTree as ET
 import subprocess
-import json
-import collections
-import re
-
-from .settings import Settings
+import shlex
 
 class SVN():
-	def __init__( self, path = None, binary = '/usr/bin/svn', log_commands = False ):
-		self.path				= None
-		self.binary				= binary
-		self.log_commands		= log_commands
-		self.valid				= False
-		self.settings			= Settings()
-		self.cached_path_info	= dict()
-		self.results			= dict()
+	binary 			= None
+	log_commands	= False
 
-		if self.binary is None:
-			sublime.error_message( 'An SVN binary program needs to be set in user settings!' )
-			return
-		elif not os.access( self.binary, os.X_OK ):
-			sublime.error_message( 'The SVN binary needs to be executable!' )
-			return
+	@classmethod
+	def init( cls, binary, log_commands ):
+		if binary is None:
+			raise OSError( 'An SVN binary needs to be configured in the SVNPlugin settings' )
+		elif not os.path.isfile( binary ):
+			raise OSError( 'SVN binary not found' )
+		elif not os.access( binary, os.X_OK ):
+			raise OSError( 'SVN binary is not executable' )
 
-		self.valid				= True
+		cls.binary 			= binary
+		cls.log_commands	= log_commands
+
+	def __init__( self, cwd = '/tmp' ):
+		self.cwd		= cwd
+		self.results 	= dict()
 
 	def info( self, path ):
 		self.run_command( [ 'info', '--xml', path ] )
@@ -36,10 +31,10 @@ class SVN():
 	def log( self, path, limit = None, revision = None ):
 		args = [ 'log', '--xml' ]
 
-		if limit is not None:
+		if limit:
 			args.extend( [ '--limit', limit ] )
 
-		if revision is not None:
+		if revision:
 			args.extend( [ '--revision', revision ] )
 
 		args.append( path )
@@ -64,7 +59,10 @@ class SVN():
 		return self.result()
 
 	def commit( self, path, commit_file_path ):
-		self.run_command( [ 'commit', '--file', commit_file_path, path ] )
+		args = [ 'commit', '--file', commit_file_path ]
+		args.extend( path )
+
+		self.run_command( args )
 
 		return self.result()
 
@@ -100,9 +98,10 @@ class SVN():
 
 		return self.result()
 
-	def cat( self, path, revision = None ):
+	def cat( self, path, revision = None):
 		args = [ 'cat' ]
-		if revision is not None:
+
+		if revision:
 			args.extend( [ '--revision', revision ] )
 
 		args.append( path )
@@ -112,31 +111,46 @@ class SVN():
 		return self.result()
 
 	def update( self, path ):
-		self.run_command( [ 'update', path ] )
+		self.run_command( [ 'update', path, '--accept', 'postpone' ] )
 
 		return self.result()
 
-	def status( self, path ):
-		self.run_command( [ 'status', '--xml', path ] )
+	def status( self, path, xml = True, quiet = False ):
+		args = [ 'status' ]
+
+		if xml:
+			args.append( '--xml' )
+
+		if quiet:
+			args.append( '--quiet' )
+
+		args.append( path )
+
+		self.run_command( args )
+
+		return self.result()
+
+	def ls( self, path ):
+		self.run_command( [ 'ls', '--xml', path ] )
 
 		return self.result()
 
 	def run_command( self, args, block = True ):
-		args.insert( 0, self.binary )
+		args.insert( 0, SVN.binary )
 
-		command = ' ' . join( [ str( arg ) for arg in args ] )
+		command = ' '.join( [ shlex.quote( str( arg ) ) for arg in args ] )
 
-		if self.log_commands:
+		if SVN.log_commands:
 			print( 'SVN Command:', command )
 
 		if not block:
-			subprocess.Popen( command, shell = True, cwd = '/tmp' )
+			subprocess.Popen( command, shell = True, cwd = self.cwd )
 
 			self.results = { 'returncode': 0, 'stdout': '', 'stderr': '' }
 
 			return
 
-		process			= subprocess.Popen( command, stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = True, cwd = '/tmp' )
+		process			= subprocess.Popen( command, stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = True, cwd = self.cwd )
 		stdout, stderr	= process.communicate()
 		stdout 			= stdout.decode()
 		stderr 			= stderr.decode()

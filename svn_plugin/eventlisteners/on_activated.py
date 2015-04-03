@@ -1,6 +1,7 @@
 import sublime_plugin
 import os.path
 
+from ..utils		import *
 from ..cache		import Cache
 from ..repository 	import Repository
 
@@ -8,9 +9,11 @@ class SvnPluginOnActivated( sublime_plugin.EventListener ):
 	def on_activated( self, view ):
 		file_path = view.file_name()
 
-		if file_path is None or file_path in Cache.cached_files:
+		if file_path is None:
 			return
 
+		has_svn_root( file_path )
+		return
 		repository_settings = dict()
 		repository_path 	= self.find_svn_folder( file_path )
 		folder_path 		= os.path.dirname( file_path )

@@ -3,6 +3,8 @@ import sublime, sublime_plugin
 import os
 import xml.etree.ElementTree as ET
 
+from ..cache						import Cache
+from ..utils						import in_svn_root, find_svn_root, SvnPluginCommand
 from ..settings 					import Settings
 from ..repository 					import Repository
 from ..thread_progress 				import ThreadProgress
@@ -10,74 +12,73 @@ from ..threads.revision_file 		import RevisionFileThread
 from ..threads.annotate_file 		import AnnotateFileThread
 from ..threads.revision_list_load 	import RevisionListLoadThread
 
-class SvnPluginInfoCommand( sublime_plugin.WindowCommand ):
-	def run( self, file = False, directory = False ):
-		if ( file == directory ):
-			return
+class SvnPluginInfoCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
+	def run( self, path = None ):
+		if path is None:
+			path = find_svn_root( self.get_file() )
+
+			if path is None:
+				return
 
 		self.settings				= Settings()
 		self.repository				= None
-		self.file_path				= self.window.active_view().file_name()
 		self.commit_panel			= None
-		self.validate_file_paths	= set()
+		self.previous				= []
 		self.__error				= ''
 
-		if directory:
-			return self.repository_quick_panel()
+		if os.path.isdir( path ):
+			return self.directory_quick_panel( path )
+		elif os.path.isfile( path ):
+			return self.file_quick_panel( path )
 
-		return self.file_quick_panel( self.file_path )
-
-	def repository_quick_panel( self ):
-		self.repository = Repository()
-
-		self.repository.valid_repositories()
-
-		if len( self.repository.repositories ) == 0:
-			return sublime.error_message( 'No repositories configured' )
-
-		self.show_quick_panel( [ repository for repository in self.repository.repositories ], lambda index: self.repository_quick_panel_callback( list( self.repository.repositories ), index ) )
-
-	def repository_quick_panel_callback( self, repositories, index ):
-		if index == -1:
-			return
-
-		path 			= repositories[ index ]
+	def directory_quick_panel( self, path ):
 		self.repository = Repository( path )
 
-		entries = [ { 'code': 'up', 'value': '..' }, { 'code': 'vf', 'value': 'View Files' }, { 'code': 'vr', 'value': 'View Revisions' } ]
+		if not self.repository.ls():
+			return sublime.error_message( self.repository.svn_error )
 
-		if self.repository.is_modified():
-			entries.insert( 2, { 'code': 'mf', 'value': 'View Modified Files' } )
+		try:
+			root = ET.fromstring( self.repository.svn_output )
+		except ET.ParseError:
+			return self.log_error( 'Failed to parse XML' )
 
-		self.show_quick_panel( [ entry[ 'value' ] for entry in entries ], lambda index: self.repository_action_callback( entries, index ) )
+		entries = []
 
-	def repository_action_callback( self, repositories, index ):
+		for entry in root.getiterator( 'entry' ):
+			kind = entry.get( 'kind' )
+
+			entries.append( { 'kind': kind, 'path': os.path.join( path, entry.findtext( 'name' ) ) } )
+
+		entries 			= sorted( entries, key = lambda k: k[ 'kind' ] )
+		formatted_entries	= [ entry[ 'path' ] for entry in entries ]
+
+		if self.previous:
+			formatted_entries.insert( 0, '..' )
+
+		self.show_quick_panel( formatted_entries, lambda index: self.directory_quick_panel_callback( entries, index ) )
+
+	def directory_quick_panel_callback( self, entries, index ):
 		if index == -1:
 			return
-		elif index == 0:
-			return self.repository_quick_panel()
 
-		code = repositories[ index ][ 'code' ]
+		if self.previous and index == 0:
+			path = self.previous.pop()
+			return self.directory_quick_panel( path )
 
-		if code == 'vr':
-			return self.repository_revisions()
+		offset 	= 0 if not self.previous else -1
+		entry 	= entries[ index + offset ]
 
-	def repository_revisions( self ):
-		thread = RevisionListLoadThread( self.repository, log_limit = self.settings.svn_log_limit(), revision = None, on_complete = self.repository_revisions_callback )
-		thread.start()
-		ThreadProgress( thread, 'Loading revisions' )
+		self.previous.append( self.repository.path )
 
-	def repository_revisions_callback( self, result ):
-		if not result:
-			return sublime.error_message( self.repository.svn_error )
+		if entry[ 'kind' ] == 'file':
+			return self.file_quick_panel( entry[ 'path' ] )
+		elif entry[ 'kind' ] == 'dir':
+			return self.directory_quick_panel( entry[ 'path' ] )
 
 
 	def file_quick_panel( self, file_path ):
 		if self.repository is None or self.repository.path != file_path:
 			self.repository = Repository( file_path )
-
-			if not self.repository.valid():
-				return sublime.error_message( self.repository.error )
 
 		if not self.repository.is_tracked():
 			top_level_file_entries = [ { 'code': 'af', 'value': 'Add File to Repository' } ]
@@ -87,14 +88,23 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand ):
 			if self.repository.is_modified():
 				top_level_file_entries.extend( [ { 'code': 'cf', 'value': 'Commit' }, { 'code': 'rf', 'value': 'Revert' }, { 'code': 'df', 'value': 'Diff' } ] )
 
-		self.show_quick_panel( [ entry[ 'value' ] for entry in top_level_file_entries ], lambda index: self.file_quick_panel_callback( file_path, top_level_file_entries, index ) )
+		formatted_entries = [ entry[ 'value' ] for entry in top_level_file_entries ]
+
+		if self.previous:
+			formatted_entries.insert( 0, '..' )
+
+		self.show_quick_panel( formatted_entries, lambda index: self.file_quick_panel_callback( file_path, top_level_file_entries, index ) )
 
 	def file_quick_panel_callback( self, file_path, entries, index ):
 		if index == -1:
 			return
 
-		offset	= 0
-		code 	= entries[ index - offset ][ 'code' ]
+		if self.previous and index == 0:
+			path = self.previous.pop()
+			return self.directory_quick_panel( path )
+
+		offset	= 0 if not self.previous else -1
+		code 	= entries[ index + offset ][ 'code' ]
 
 		if code == 'af':
 			return self.file_add()
@@ -249,3 +259,23 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand ):
 	@property
 	def error( self ):
 		return self.__error
+
+class SvnPluginFileInfoCommand( SvnPluginInfoCommand ):
+	def run( self ):
+		if not in_svn_root( self.get_file() ):
+			return
+
+		self.window.run_command( 'svn_plugin_info', { 'path': self.get_file() } )
+
+	def is_visible( self ):
+		return in_svn_root( self.get_file() )
+
+class SvnPluginFolderInfoCommand( SvnPluginInfoCommand ):
+	def run( self ):
+		if not in_svn_root( self.get_folder() ):
+			return
+
+		self.window.run_command( 'svn_plugin_info', { 'path': self.get_folder() } )
+
+	def is_visible( self ):
+		return in_svn_root( self.get_folder() )

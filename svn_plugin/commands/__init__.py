@@ -13,6 +13,12 @@ from .svn_diff 		import SvnPluginFileDiffCommand
 from .svn_diff 		import SvnPluginFolderDiffCommand
 
 from .svn_info 		import SvnPluginInfoCommand
+from .svn_info 		import SvnPluginFileInfoCommand
+from .svn_info 		import SvnPluginFolderInfoCommand
+
+from .svn_status	import SvnPluginStatusCommand
+from .svn_status	import SvnPluginFileStatusCommand
+from .svn_status	import SvnPluginFolderStatusCommand
 
 from .svn_update 	import SvnPluginUpdateCommand
 from .svn_update 	import SvnPluginFileUpdateCommand
@@ -34,6 +40,12 @@ __all__ = [
 	'SvnPluginFolderDiffCommand',
 
 	'SvnPluginInfoCommand',
+	'SvnPluginFileInfoCommand',
+	'SvnPluginFolderInfoCommand',
+
+	'SvnPluginStatusCommand',
+	'SvnPluginFileStatusCommand',
+	'SvnPluginFolderStatusCommand',
 
 	'SvnPluginUpdateCommand',
 	'SvnPluginFileUpdateCommand',

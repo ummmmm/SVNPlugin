@@ -1,26 +1,28 @@
 import sublime, sublime_plugin
 
 from ..cache				import Cache
+from ..utils				import in_svn_root, find_svn_root, SvnPluginCommand
 from ..settings 			import Settings
 from ..repository 			import Repository
 from ..thread_progress 		import ThreadProgress
 from ..threads.diff_path 	import DiffPathThread
 
-class SvnPluginDiffCommand( sublime_plugin.WindowCommand ):
+class SvnPluginDiffCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 	def run( self, path = None, revision = None ):
-		file_path = self.window.active_view().file_name()
-
 		if path is None:
-			if not self.is_visible():
-				return
+			path = find_svn_root( self.get_file() )
 
-			path = Cache.cached_files[ file_path ][ 'repository' ][ 'path' ]
+			if path is None:
+				return
 
 		self.repository = Repository( path )
 
+		if not self.repository.is_tracked():
+			return sublime.error_message( '{0} is not under version control' . format( path ) )
+
 		if revision is None:
 			if not self.repository.is_modified():
-				return sublime.error_message( self.repository.error )
+				return sublime.error_message( '{0} has not been modified' . format( path ) )
 
 		thread = DiffPathThread( self.repository, revision, Settings().svn_diff_tool(), self.diff_callback )
 		thread.start()
@@ -34,50 +36,25 @@ class SvnPluginDiffCommand( sublime_plugin.WindowCommand ):
 			self.window.new_file().run_command( 'append', { 'characters': self.repository.svn_output } )
 
 	def is_visible( self ):
-		file_path = self.window.active_view().file_name()
+		return in_svn_root( self.window.active_view().file_name() )
 
-		if file_path not in Cache.cached_files:
-			return False
-
-		if not Cache.cached_files[ file_path ][ 'repository' ][ 'tracked' ]:
-			return False
-
-		return Repository( file_path ).is_modified()
-
-class SvnPluginFileDiffCommand( sublime_plugin.WindowCommand ):
-	def run( self ):
-		if not self.is_visible():
+class SvnPluginFileDiffCommand( SvnPluginDiffCommand ):
+	def run( self, ):
+		if not in_svn_root( self.get_file() ):
 			return
 
-		file_path = self.window.active_view().file_name()
-		self.window.run_command( 'svn_plugin_diff', { 'path': Cache.cached_files[ file_path ][ 'file' ][ 'path' ] } )
+		self.window.run_command( 'svn_plugin_diff', { 'path': self.get_file() } )
 
 	def is_visible( self ):
-		file_path = self.window.active_view().file_name()
+		return in_svn_root( self.get_file() )
+		
 
-		if file_path not in Cache.cached_files:
-			return False
-
-		if not Cache.cached_files[ file_path ][ 'file' ][ 'tracked' ]:
-			return False
-
-		return Repository( file_path ).is_modified()
-
-class SvnPluginFolderDiffCommand( sublime_plugin.WindowCommand ):
+class SvnPluginFolderDiffCommand( SvnPluginDiffCommand ):
 	def run( self ):
-		if not self.is_visible():
+		if not in_svn_root( self.get_folder() ):
 			return
 
-		file_path = self.window.active_view().file_name()
-		self.window.run_command( 'svn_plugin_diff', { 'path': Cache.cached_files[ file_path ][ 'folder' ][ 'path' ] } )
+		self.window.run_command( 'svn_plugin_diff', { 'path': self.get_folder() } )
 
 	def is_visible( self ):
-		file_path = self.window.active_view().file_name()
-
-		if file_path not in Cache.cached_files:
-			return False
-
-		if not Cache.cached_files[ file_path ][ 'folder' ][ 'tracked' ]:
-			return False
-
-		return Repository( file_path ).is_modified()
+		return in_svn_root( self.get_folder() )

@@ -8,26 +8,28 @@ import tempfile
 from ..thread_progress	import ThreadProgress
 from ..repository 		import Repository
 from ..settings 		import Settings
+from ..utils			import in_svn_root, find_svn_root, SvnPluginCommand
 from ..cache			import Cache
 
 EDITOR_EOF_PREFIX 	= '--This line, and those below, will be ignored--\n'
 
-class SvnPluginCommitCommand( sublime_plugin.WindowCommand ):
+class SvnPluginCommitCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 	def __init__( self, window ):
 		self.window 			= window
 		self.commit_file_path 	= ''
 		self.__error 			= ''
 
 	def run( self, path = None ):
-		file_path = self.window.active_view().file_name()
-
 		if path is None:
-			if not self.is_visible():
+			path = find_svn_root( self.get_file() )
+
+			if path is None:
 				return
 
-			path = Cache.cached_files[ file_path ][ 'repository' ][ 'path' ]
-
 		repository = Repository( path )
+
+		if not repository.is_tracked():
+			return sublime.error_message( '{0} is not under version control' . format( path ) )
 
 		if not repository.status():
 			return sublime.error_message( repository.error )
@@ -58,6 +60,7 @@ class SvnPluginCommitCommand( sublime_plugin.WindowCommand ):
 			return sublime.error_message( self.error )
 
 		view = self.window.open_file( self.commit_file_path )
+		view.sel().add( sublime.Region( 0, 27 ) )
 		view.settings().set( 'SVNPlugin', [ file[ 'path'] for file in files ] )
 
 	def is_visible( self ):
@@ -88,6 +91,7 @@ class SvnPluginCommitCommand( sublime_plugin.WindowCommand ):
 
 		try:
 			with open( file_path, 'w' ) as fh:
+				fh.write( 'Type commit message here...\n' )
 				fh.write( '\n' )
 				fh.write( EDITOR_EOF_PREFIX )
 				fh.write( '\n' )
@@ -113,40 +117,22 @@ class SvnPluginCommitCommand( sublime_plugin.WindowCommand ):
 	def error( self ):
 		return self.__error
 
-class SvnPluginFileCommitCommand( sublime_plugin.WindowCommand ):
+class SvnPluginFileCommitCommand( SvnPluginCommitCommand ):
 	def run( self ):
-		if not self.is_visible():
+		if not in_svn_root( self.get_file() ):
 			return
 
-		file_path = self.window.active_view().file_name()
-		self.window.run_command( 'svn_plugin_commit', { 'path': Cache.cached_files[ file_path ][ 'file' ][ 'path' ] } )
+		self.window.run_command( 'svn_plugin_commit', { 'path': self.get_file() } )
 
 	def is_visible( self ):
-		file_path = self.window.active_view().file_name()
+		return in_svn_root( self.get_file() )
 
-		if file_path not in Cache.cached_files:
-			return False
-
-		if not Cache.cached_files[ file_path ][ 'file' ][ 'tracked' ]:
-			return False
-
-		return Repository( file_path ).is_modified()
-
-class SvnPluginFolderCommitCommand( sublime_plugin.WindowCommand ):
+class SvnPluginFolderCommitCommand( SvnPluginCommitCommand ):
 	def run( self ):
-		if not self.is_visible():
+		if not in_svn_root( self.get_folder() ):
 			return
 
-		file_path = self.window.active_view().file_name()
-		self.window.run_command( 'svn_plugin_commit', { 'path': Cache.cached_files[ file_path ][ 'folder' ][ 'path' ] } )
+		self.window.run_command( 'svn_plugin_commit', { 'path': self.get_folder() } )
 
 	def is_visible( self ):
-		file_path = self.window.active_view().file_name()
-
-		if file_path not in Cache.cached_files:
-			return False
-
-		if not Cache.cached_files[ file_path ][ 'folder' ][ 'tracked' ]:
-			return False
-
-		return Repository( file_path ).is_modified()
+		return in_svn_root( self.get_folder() )

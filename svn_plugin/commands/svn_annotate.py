@@ -1,19 +1,23 @@
 import sublime, sublime_plugin
 
 from ..cache					import Cache
+from ..utils					import in_svn_root, SvnPluginCommand
 from ..repository 				import Repository
 from ..thread_progress 			import ThreadProgress
 from ..threads.annotate_file	import AnnotateFileThread
 
-class SvnPluginFileAnnotateCommand( sublime_plugin.WindowCommand ):
+class SvnPluginFileAnnotateCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 	def run( self, path = None, revision = None ):
 		if path is None:
-			path = self.window.active_view().file_name()
+			path = self.get_file()
 
-		if path not in Cache.cached_files or not Cache.cached_files[ path ][ 'file' ][ 'tracked' ]:
-			return
+			if not in_svn_root( path ):
+				return
 
 		self.repository = Repository( path )
+
+		if not self.repository.is_tracked():
+			return sublime.error_message( '{0} is not under version control' . format( path ) )
 
 		thread = AnnotateFileThread( self.repository, revision = revision, on_complete = self.annotate_callback )
 		thread.start()
@@ -21,7 +25,7 @@ class SvnPluginFileAnnotateCommand( sublime_plugin.WindowCommand ):
 
 	def annotate_callback( self, result ):
 		if not result:
-			return sublime.error_message( self.repository.error )
+			return sublime.error_message( self.repository.svn_error )
 
 		current_syntax	= self.window.active_view().settings().get( 'syntax' )
 		view 			= self.window.new_file()
@@ -33,9 +37,4 @@ class SvnPluginFileAnnotateCommand( sublime_plugin.WindowCommand ):
 		view.set_read_only( True )
 
 	def is_visible( self ):
-		file_path = self.window.active_view().file_name()
-
-		if file_path not in Cache.cached_files:
-			return False
-
-		return Cache.cached_files[ file_path ][ 'file' ][ 'tracked' ]
+		return in_svn_root( self.get_file() )

@@ -16,12 +16,14 @@ module_load_order = [
 	'.settings',
 	'.svn',
 	'.repository',
+	'.utils',
 	'.thread_progress',
 
 	'.threads.annotate_file',
 	'.threads.diff_path',
 	'.threads.revision_file',
 	'.threads.revision_list_load',
+	'.threads.status_path',
 	'.threads.update_path',
 	'.threads',
 
@@ -34,6 +36,7 @@ module_load_order = [
 	'.commands.svn_commit',
 	'.commands.svn_diff',
 	'.commands.svn_info',
+	'.commands.svn_status',
 	'.commands.svn_update',
 	'.commands'
 ]

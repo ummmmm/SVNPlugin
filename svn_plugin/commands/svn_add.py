@@ -1,52 +1,44 @@
 import sublime, sublime_plugin
 
 from ..cache				import Cache
+from ..utils				import in_svn_root, find_svn_root, SvnPluginCommand
 from ..settings 			import Settings
 from ..repository 			import Repository
 
-class SvnPluginAddCommand( sublime_plugin.WindowCommand ):
-	def run( self, path ):
+class SvnPluginAddCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
+	def run( self, path = None ):
+		if path is None:
+			path = find_svn_root( self.get_file() )
+
+			if path is None:
+				return
+
 		self.repository = Repository( path )
 
+		if self.repository.is_tracked():
+			return sublime.error_message( '{0} is already under version control' . format( path ) )
+
 		if not self.repository.add():
-			return sublime.error_message( self.repository.error )
+			return sublime.error_message( self.repository.svn_error )
 
 		sublime.status_message( '{0} added' . format( path ) )
 
-class SvnPluginFileAddCommand( sublime_plugin.WindowCommand ):
+class SvnPluginFileAddCommand( SvnPluginAddCommand ):
 	def run( self ):
-		if not self.is_visible():
+		if not in_svn_root( self.get_file() ):
 			return
 
-		file_path = self.window.active_view().file_name()
-		self.window.run_command( 'svn_plugin_add', { 'path': Cache.cached_files[ file_path ][ 'file' ][ 'path' ] } )
+		self.window.run_command( 'svn_plugin_add', { 'path': self.get_file() } )
 
 	def is_visible( self ):
-		file_path = self.window.active_view().file_name()
+		return in_svn_root( self.get_file() )
 
-		if file_path not in Cache.cached_files:
-			return False
-
-		if not Cache.cached_files[ file_path ][ 'file' ][ 'tracked' ] and Cache.cached_files[ file_path ][ 'folder' ][ 'tracked' ]:
-			return True
-
-		return False
-
-class SvnPluginFolderAddCommand( sublime_plugin.WindowCommand ):
+class SvnPluginFolderAddCommand( SvnPluginAddCommand ):
 	def run( self ):
-		if not self.is_visible():
+		if not in_svn_root( self.get_folder() ):
 			return
 
-		file_path = self.window.active_view().file_name()
-		self.window.run_command( 'svn_plugin_add', { 'path': Cache.cached_files[ file_path ][ 'folder' ][ 'path' ] } )
+		self.window.run_command( 'svn_plugin_add', { 'path': self.get_folder() } )
 
 	def is_visible( self ):
-		file_path = self.window.active_view().file_name()
-
-		if file_path not in Cache.cached_files:
-			return False
-
-		if not Cache.cached_files[ file_path ][ 'folder' ][ 'tracked' ]	and Cache.cached_files[ file_path ][ 'repository' ][ 'tracked' ]:
-			return True
-
-		return False
+		return in_svn_root( self.get_folder() )

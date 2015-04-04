@@ -1,6 +1,6 @@
 import sublime
 
-# Create goes to https://github.com/wbond/package_control/blob/master/package_control/thread_progress.py
+# Credit goes to https://github.com/wbond/package_control/blob/master/package_control/thread_progress.py
 
 class ThreadProgress():
 	def __init__( self, thread, message, success_message = '' ):

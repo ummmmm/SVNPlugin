@@ -3,8 +3,9 @@
 	{ "keys": ["ctrl+m", "ctrl+c", "ctrl+f"], "command": "svn_plugin_file_commit" },
 	{ "keys": ["ctrl+m", "ctrl+c", "ctrl+d"], "command": "svn_plugin_folder_commit" },
 
-	{ "keys": ["ctrl+m", "ctrl+i", "ctrl+f"], "command": "svn_plugin_info", 	"args": { "file": 		true } },
-	{ "keys": ["ctrl+m", "ctrl+i", "ctrl+d"], "command": "svn_plugin_info", 	"args": { "directory": 	true } },
+	{ "keys": ["ctrl+m", "ctrl+i", "ctrl+r"], "command": "svn_plugin_info" },
+	{ "keys": ["ctrl+m", "ctrl+i", "ctrl+f"], "command": "svn_plugin_file_info" },
+	{ "keys": ["ctrl+m", "ctrl+i", "ctrl+d"], "command": "svn_plugin_folder_info" },
 
 	{ "keys": ["ctrl+m", "ctrl+u", "ctrl+r"], "command": "svn_plugin_update" },
 	{ "keys": ["ctrl+m", "ctrl+u", "ctrl+f"], "command": "svn_plugin_file_update" },

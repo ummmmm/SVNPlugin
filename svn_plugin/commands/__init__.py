@@ -16,6 +16,10 @@ from .svn_info 		import SvnPluginInfoCommand
 from .svn_info 		import SvnPluginFileInfoCommand
 from .svn_info 		import SvnPluginFolderInfoCommand
 
+from .svn_log 		import SvnPluginLogCommand
+from .svn_log 		import SvnPluginFileLogCommand
+from .svn_log 		import SvnPluginFolderLogCommand
+
 from .svn_status	import SvnPluginStatusCommand
 from .svn_status	import SvnPluginFileStatusCommand
 from .svn_status	import SvnPluginFolderStatusCommand
@@ -42,6 +46,10 @@ __all__ = [
 	'SvnPluginInfoCommand',
 	'SvnPluginFileInfoCommand',
 	'SvnPluginFolderInfoCommand',
+
+	'SvnPluginLogCommand',
+	'SvnPluginFileLogCommand',
+	'SvnPluginFolderLogCommand',
 
 	'SvnPluginStatusCommand',
 	'SvnPluginFileStatusCommand',

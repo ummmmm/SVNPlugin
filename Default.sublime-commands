@@ -61,6 +61,21 @@
 
 
 	{
+		"caption": "SVN Plugin: Log",
+		"command": "svn_plugin_log"
+	},
+	{
+		"caption": "SVN Plugin: (File) Log",
+		"command": "svn_plugin_file_log"
+	},
+	{
+		"caption": "SVN Plugin: (Folder) Log",
+		"command": "svn_plugin_folder_log"
+	},
+
+
+
+	{
 		"caption": "SVN Plugin: Status",
 		"command": "svn_plugin_status"
 	},

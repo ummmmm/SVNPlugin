@@ -256,6 +256,9 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 
 		return False
 
+	def is_visible( self ):
+		return in_svn_root( self.get_file() )
+
 	@property
 	def error( self ):
 		return self.__error

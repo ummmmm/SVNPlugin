@@ -1,4 +1,3 @@
-import sublime
 import os
 import subprocess
 import shlex
@@ -8,7 +7,7 @@ class SVN():
 	log_commands	= False
 
 	@classmethod
-	def init( cls, binary, log_commands ):
+	def init( cls, binary = None, log_commands = False ):
 		if binary is None:
 			raise OSError( 'An SVN binary needs to be configured in the SVNPlugin settings' )
 		elif not os.path.isfile( binary ):
@@ -21,15 +20,16 @@ class SVN():
 
 	def __init__( self, cwd = '/tmp' ):
 		self.cwd		= cwd
-		self.results 	= dict()
+		self.results	= dict()
 
 	def info( self, path ):
-		self.run_command( [ 'info', '--xml', path ] )
+		return self.run_command( [ 'info', '--xml', path ] )
 
-		return self.result()
+	def log( self, path, xml = True, limit = None, revision = None ):
+		args = [ 'log', '--verbose' ]
 
-	def log( self, path, limit = None, revision = None ):
-		args = [ 'log', '--xml' ]
+		if xml:
+			args.append( '--xml' )
 
 		if limit:
 			args.extend( [ '--limit', limit ] )
@@ -39,32 +39,22 @@ class SVN():
 
 		args.append( path )
 
-		self.run_command( args )
-
-		return self.result()
+		return self.run_command( args )
 
 	def add( self, path ):
-		self.run_command( [ 'add', path ] )
-
-		return self.result()
+		return self.run_command( [ 'add', path ] )
 
 	def remove( self ):
-		self.run_command( [ 'remove', path ] )
-
-		return self.result()
+		return self.run_command( [ 'remove', path ] )
 
 	def revert( self, path ):
-		self.run_command( [ 'revert', path ] )
+		return self.run_command( [ 'revert', path ] )
 
-		return self.result()
-
-	def commit( self, path, commit_file_path ):
+	def commit( self, paths, commit_file_path ):
 		args = [ 'commit', '--file', commit_file_path ]
-		args.extend( path )
+		args.extend( paths )
 
-		self.run_command( args )
-
-		return self.result()
+		return self.run_command( args )
 
 	def annotate( self, path, revision ):
 		args = [ 'annotate' ]
@@ -74,29 +64,21 @@ class SVN():
 
 		args.append( path )
 
-		self.run_command( args )
-
-		return self.result()
+		return self.run_command( args )
 
 	def diff( self, path, revision = None, diff_tool = None ):
 		args 	= [ 'diff' ]
-		block	= True
+		block	= False if diff_tool else True
 
 		if revision:
 			args.extend( [ '--revision', revision ] )
 
-		if diff_tool is not None:
-			block	= False
+		if diff_tool:
 			args.extend( [ '--diff-cmd', diff_tool ] )
 
 		args.append( path )
 
-		self.run_command( args, block = block )
-
-		if not block:
-			return True
-
-		return self.result()
+		return self.run_command( args, block = block )
 
 	def cat( self, path, revision = None):
 		args = [ 'cat' ]
@@ -106,14 +88,10 @@ class SVN():
 
 		args.append( path )
 
-		self.run_command( args )
-
-		return self.result()
+		return self.run_command( args )
 
 	def update( self, path ):
-		self.run_command( [ 'update', path, '--accept', 'postpone' ] )
-
-		return self.result()
+		return self.run_command( [ 'update', path, '--accept', 'postpone' ] )
 
 	def status( self, path, xml = True, quiet = False ):
 		args = [ 'status' ]
@@ -126,14 +104,10 @@ class SVN():
 
 		args.append( path )
 
-		self.run_command( args )
-
-		return self.result()
+		return self.run_command( args )
 
 	def ls( self, path ):
-		self.run_command( [ 'ls', '--xml', path ] )
-
-		return self.result()
+		return self.run_command( [ 'ls', '--xml', path ] )
 
 	def run_command( self, args, block = True ):
 		args.insert( 0, SVN.binary )
@@ -148,7 +122,7 @@ class SVN():
 
 			self.results = { 'returncode': 0, 'stdout': '', 'stderr': '' }
 
-			return
+			return True
 
 		process			= subprocess.Popen( command, stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = True, cwd = self.cwd )
 		stdout, stderr	= process.communicate()
@@ -157,7 +131,4 @@ class SVN():
 
 		self.results = { 'returncode': process.returncode, 'stdout': stdout, 'stderr': stderr }
 
-		return
-
-	def result( self ):
 		return True if self.results[ 'returncode' ] == 0 else False

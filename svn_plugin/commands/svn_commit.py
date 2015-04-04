@@ -11,7 +11,7 @@ from ..settings 		import Settings
 from ..utils			import in_svn_root, find_svn_root, SvnPluginCommand
 from ..cache			import Cache
 
-EDITOR_EOF_PREFIX 	= '--This line, and those below, will be ignored--\n'
+EDITOR_EOF_PREFIX = '--This line, and those below, will be ignored--\n'
 
 class SvnPluginCommitCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 	def __init__( self, window ):
@@ -64,15 +64,7 @@ class SvnPluginCommitCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 		view.settings().set( 'SVNPlugin', [ file[ 'path'] for file in files ] )
 
 	def is_visible( self ):
-		file_path = self.window.active_view().file_name()
-
-		if file_path not in Cache.cached_files:
-			return False
-
-		if not Cache.cached_files[ file_path ][ 'repository' ][ 'tracked' ]:
-			return False
-
-		return Repository( file_path ).is_modified()
+		return in_svn_root( self.get_file() )
 
 	def create_commit_file( self, files ):
 		valid_path = False

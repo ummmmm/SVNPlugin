@@ -11,7 +11,7 @@ from .svn_plugin.commands 		import *
 from .svn_plugin.eventlisteners import *
 from .svn_plugin.reloader 		import *
 from .svn_plugin.svn 			import SVN
-	
+
 def plugin_loaded():
 	settings = sublime.load_settings( 'SVNPlugin.sublime-settings' )
 

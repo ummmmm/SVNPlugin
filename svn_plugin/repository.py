@@ -1,5 +1,3 @@
-import sublime
-
 import os
 import xml.etree.ElementTree as ET
 import json
@@ -27,7 +25,7 @@ class Repository():
 			for wc_status in child.getiterator( 'wc-status' ):
 				value = wc_status.get( 'item' )
 
-				if value == 'added' or value == 'deleted' or value == 'replaced' or value == 'modified' or value == 'merged' or value == 'conflicted':
+				if value in ( 'added', 'deleted', 'replaced', 'modified', 'merged', 'conflicted' ):
 					return True
 
 		return False
@@ -71,8 +69,8 @@ class Repository():
 	def add( self ):
 		return self.svn.add( self.path )
 
-	def log( self, limit = None, revision = None ):
-		return self.svn.log( self.path, limit = limit, revision = revision )
+	def log( self, xml = True, limit = None, revision = None ):
+		return self.svn.log( self.path, xml = xml, limit = limit, revision = revision )
 
 	def status( self, xml = True, quiet = False ):
 		return self.svn.status( self.path, xml = xml, quiet = quiet )

@@ -1,6 +1,7 @@
 import sublime, sublime_plugin
 
 import os
+import datetime
 import xml.etree.ElementTree as ET
 
 from ..cache						import Cache
@@ -144,6 +145,8 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 		if not result:
 			return sublime.error_message( self.repository.error )
 
+		date_format = '%Y-%m-%dT%H:%M:%S.%fZ'
+
 		try:
 			root = ET.fromstring( self.repository.svn_output )
 		except ET.ParseError:
@@ -152,7 +155,12 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 		revisions = []
 
 		for child in root.getiterator( 'logentry' ):
-			revisions.append( { 'number': child.get( 'revision', '' ), 'author': child.findtext( 'author', '' ), 'date': child.findtext( 'date', '' ), 'message': child.findtext( 'msg', '' ) } )
+			try:
+				date = datetime.datetime.strptime( child.findtext( 'date', '' ), date_format ).replace( tzinfo = datetime.timezone.utc ).astimezone( tz = None ).strftime( '%a %b %d, %Y @ %I:%M %p' )
+			except ValueError:
+				date = 'N/A'
+
+			revisions.append( { 'number': child.get( 'revision', '' ), 'author': child.findtext( 'author', '' ), 'date': date, 'message': child.findtext( 'msg', '' ) } )
 
 		self.revisions_quick_panel( revisions )
 

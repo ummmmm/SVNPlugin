@@ -15,6 +15,9 @@ def has_svn_root( path ):
 	return True if find_svn_root( folder ) is not None else False
 
 def find_svn_root( path ):
+	if path is None:
+		return None
+
 	if os.path.isfile( path ):
 		folder = os.path.dirname( path )
 	else:

@@ -24,11 +24,12 @@ class SvnPluginStatusCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 		if not result:
 			return sublime.error_message( self.repository.error )
 
-		view = self.window.new_file()
+		view 	= self.window.new_file()
+		output	= 'No files modified' if not self.repository.svn_output else self.repository.svn_output
 
 		view.set_name( 'SVNPlugin: Status' )
 		view.set_scratch( True )
-		view.run_command( 'append', { 'characters': self.repository.svn_output } )
+		view.run_command( 'append', { 'characters': output } )
 		view.set_read_only( True )
 
 	def is_visible( self ):

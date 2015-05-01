@@ -25,7 +25,7 @@ class SvnPluginUpdateCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 
 	def update_callback( self, result ):
 		if not result:
-			return sublime.error_message( self.repository.error )
+			return sublime.error_message( self.repository.svn_error )
 
 		view = self.window.new_file()
 

@@ -23,7 +23,7 @@ class SvnPluginOnPostSave( sublime_plugin.EventListener ):
 		if prefix_pos:
 			message			= message[ 0 : prefix_pos ]
 
-		if len( message.strip() ) == 0:
+		if len( message.strip() ) == 0 or message.strip() == 'Type commit message here...':
 			return sublime.message_dialog( 'Did not commit, log message unchanged or not specified' )
 
 		if not repository.commit( commit_file_path ):

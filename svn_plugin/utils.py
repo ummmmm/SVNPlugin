@@ -60,6 +60,12 @@ class SvnPluginCommand():
 
 				if file_path is not None:
 					return os.path.dirname( file_path )
+
+				folders = self.window.folders()
+
+				if folders:
+					return folders[ 0 ]
+
 		else:
 			if os.path.isfile( path ):
 				return os.path.dirname( path )
@@ -70,6 +76,11 @@ class SvnPluginCommand():
 
 	def get_file( self ):
 		if hasattr( self, 'window' ):
-			return self.window.active_view().file_name()
+			file = self.window.active_view().file_name()
+
+			if file is not None:
+				return file
+
+			return self.get_folder()
 
 		return None

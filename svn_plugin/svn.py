@@ -25,11 +25,14 @@ class SVN():
 	def info( self, path ):
 		return self.run_command( [ 'info', '--xml', path ] )
 
-	def log( self, path, xml = True, limit = None, revision = None ):
+	def log( self, path, xml = True, stop_on_copy = True, limit = None, revision = None ):
 		args = [ 'log', '--verbose' ]
 
 		if xml:
 			args.append( '--xml' )
+
+		if stop_on_copy:
+			args.append( '--stop-on-copy' )
 
 		if limit:
 			args.extend( [ '--limit', limit ] )

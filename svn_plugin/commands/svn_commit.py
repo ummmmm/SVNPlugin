@@ -60,7 +60,6 @@ class SvnPluginCommitCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 			return sublime.error_message( self.error )
 
 		view = self.window.open_file( self.commit_file_path )
-		view.sel().add( sublime.Region( 0, 27 ) )
 		view.settings().set( 'SVNPlugin', [ file[ 'path'] for file in files ] )
 
 	def is_visible( self ):
@@ -83,7 +82,7 @@ class SvnPluginCommitCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 
 		try:
 			with open( file_path, 'w' ) as fh:
-				fh.write( 'Type commit message here...\n' )
+				fh.write( '\n' )
 				fh.write( '\n' )
 				fh.write( EDITOR_EOF_PREFIX )
 				fh.write( '\n' )

@@ -63,14 +63,14 @@ class Repository():
 	def annotate( self, revision = None ):
 		return self.svn.annotate( self.path, revision )
 
-	def diff( self, revision_number = None, diff_tool = None ):
-		return self.svn.diff( self.path, revision = revision_number, diff_tool = diff_tool )
+	def diff( self, revision_number = None, change_number = None, diff_tool = None ):
+		return self.svn.diff( self.path, revision = revision_number, change = change_number, diff_tool = diff_tool )
 
 	def add( self ):
 		return self.svn.add( self.path )
 
-	def log( self, xml = True, limit = None, revision = None ):
-		return self.svn.log( self.path, xml = xml, limit = limit, revision = revision )
+	def log( self, xml = True, stop_on_copy = True, limit = None, revision = None ):
+		return self.svn.log( self.path, xml = xml, stop_on_copy = stop_on_copy, limit = limit, revision = revision )
 
 	def status( self, xml = True, quiet = False ):
 		return self.svn.status( self.path, xml = xml, quiet = quiet )

@@ -133,11 +133,11 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 	def file_commit( self ):
 		return self.window.run_command( 'svn_plugin_commit', { 'path': self.repository.path } )
 
-	def file_diff( self, revision = None ):
-		return self.window.run_command( 'svn_plugin_diff', { 'path': self.repository.path, 'revision': revision } )
+	def file_diff( self, revision = None, change = None ):
+		return self.window.run_command( 'svn_plugin_diff', { 'path': self.repository.path, 'revision': revision, 'change': change } )
 
 	def file_revisions( self ):
-		thread = RevisionListLoadThread( self.repository, log_limit = self.settings.svn_log_limit(), revision = None, on_complete = self.file_revisions_callback )
+		thread = RevisionListLoadThread( self.repository, log_limit = self.settings.svn_log_limit(), stop_on_copy = self.settings.svn_stop_on_copy(), revision = None, on_complete = self.file_revisions_callback )
 		thread.start()
 		ThreadProgress( thread, 'Loading revisions' )
 
@@ -204,10 +204,10 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 
 		offset				= 1
 		revision_index 		= index - offset
-		entries 			= [ { 'code': 'up', 'value': '..' }, { 'code': 'vf', 'value': 'View' }, { 'code': 'af', 'value': 'Annotate' } ]
+		entries 			= [ { 'code': 'up', 'value': '..' }, { 'code': 'vf', 'value': 'View' }, { 'code': 'af', 'value': 'Annotate' }, { 'code': 'df_c', 'value': 'Diff Changes in this Commit' } ]
 
 		if revision_index != 0 or self.repository.is_modified(): # only show diff option if the current revision has been modified locally or it's an older revision
-			entries.insert( 2, { 'code': 'df', 'value': 'Diff' } )
+			entries.insert( 3, { 'code': 'df', 'value': 'Diff Against HEAD' } )
 
 		self.show_quick_panel( [ entry[ 'value' ] for entry in entries ], lambda index: self.revision_action_callback( entries, revisions, revision_index, index ) )
 
@@ -226,6 +226,8 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 			return self.file_revision( revision = revision[ 'number' ] )
 		elif code == 'df':
 			return self.file_diff( revision = revision[ 'number' ] )
+		elif code == 'df_c':
+			return self.file_diff( change = revision[ 'number' ] )
 		elif code == 'af':
 			return self.file_annotate( revision = revision[ 'number' ] )
 
@@ -241,7 +243,7 @@ class SvnPluginInfoCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 		self.show_panel( revision[ 'message' ] )
 
 	def show_quick_panel( self, entries, on_select, on_highlight = None, selected_index = -1 ):
-		sublime.set_timeout( lambda: self.window.show_quick_panel( entries, on_select, on_highlight = on_highlight, selected_index = selected_index ), 10 )
+		sublime.set_timeout( lambda: self.window.show_quick_panel( entries, on_select, flags = sublime.KEEP_OPEN_ON_FOCUS_LOST, on_highlight = on_highlight, selected_index = selected_index ), 10 )
 
 	def show_panel( self, content ):
 		if self.settings.svn_log_panel():

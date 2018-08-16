@@ -11,6 +11,9 @@
 	// the maximum number of revisions to load for a file
 	"svn_log_limit": 100,
 
+	// will the pass the stop-on-copy flag to the SVN binary
+	"svn_stop_on_copy": true,
+
 	// the diff tool to use when running svn diff
 	// if left blank, the diff output will open in a new file
 	"svn_diff_tool": "/usr/bin/meld",

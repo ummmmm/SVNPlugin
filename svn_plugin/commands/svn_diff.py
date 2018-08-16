@@ -8,7 +8,7 @@ from ..thread_progress 		import ThreadProgress
 from ..threads.diff_path 	import DiffPathThread
 
 class SvnPluginDiffCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
-	def run( self, path = None, revision = None ):
+	def run( self, path = None, revision = None, change = None ):
 		if path is None:
 			path = find_svn_root( self.get_file() )
 
@@ -20,11 +20,11 @@ class SvnPluginDiffCommand( sublime_plugin.WindowCommand, SvnPluginCommand ):
 		if not self.repository.is_tracked():
 			return sublime.error_message( '{0} is not under version control' . format( path ) )
 
-		if revision is None:
+		if revision is None and change is None:
 			if not self.repository.is_modified():
 				return sublime.error_message( '{0} has not been modified' . format( path ) )
 
-		thread = DiffPathThread( self.repository, revision, Settings().svn_diff_tool(), self.diff_callback )
+		thread = DiffPathThread( self.repository, revision, change, Settings().svn_diff_tool(), self.diff_callback )
 		thread.start()
 		ThreadProgress( thread, 'Running diff on {0}' . format( path ) )
 

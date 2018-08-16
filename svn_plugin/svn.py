@@ -69,15 +69,20 @@ class SVN():
 
 		return self.run_command( args )
 
-	def diff( self, path, revision = None, diff_tool = None ):
+	def diff( self, path, revision = None, change = None, diff_tool = None ):
 		args 	= [ 'diff' ]
 		block	= False if diff_tool else True
 
 		if revision:
 			args.extend( [ '--revision', revision ] )
 
+		if change:
+			args.extend( [ '--change', change ] )
+
 		if diff_tool:
 			args.extend( [ '--diff-cmd', diff_tool ] )
+
+		args.extend( [ '--force' ] )
 
 		args.append( path )
 

@@ -52,6 +52,16 @@ class Settings():
 
 		return value
 
+	def svn_stop_on_copy( self ):
+		self.load_settings()
+
+		value = self.settings.get( 'svn_stop_on_copy' )
+
+		if type( value ) is not bool:
+			return True
+
+		return value
+
 	def svn_diff_tool( self ):
 		self.load_settings()
 
